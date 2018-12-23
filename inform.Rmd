@@ -1,0 +1,188 @@
+---
+title: "Health Nutrition and Population Statistics inform"
+author: "Violeta Roizman"
+date: "23 de diciembre de 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(ggmap)
+library(maps)
+library(ggthemes)
+```
+
+## Importing the data
+
+Of course first of all we import the data, we do this with the `readr` package.
+
+```{r, echo=FALSE}
+countries_hnp <- read_csv(here::here("data", "HNP_StatsCountry.csv"))
+
+dataset_hnp <- read_csv(here::here("data", "HNP_StatsData.csv")) %>%
+  select(-X63)
+
+indicators_hnp <- read_csv(here::here("data", "HNP_StatsSeries.csv"))
+```
+
+# Tidying the data
+
+We tidy the data with `dplyr` and `tidyr`. We select the columns we care about.
+
+```{r, echo=FALSE}
+# select relevant variables and rename variables
+indicators_hnp_keep = indicators_hnp %>%
+  select(`Series Code`, `Topic`, `Indicator Name`, `Long definition`)
+
+colnames(indicators_hnp_keep) <- c("series_code", "topic", "indicator_name", "long_definition")
+
+indicators_hnp_keep <- indicators_hnp_keep %>%
+  mutate(gen_topic = map_chr(str_split(indicators_hnp_keep$topic, pattern = ":"), 
+                             ~.x[1]))
+
+countries_hnp_keep <- countries_hnp %>%
+  select(`Country Code`, `Short Name`, `Table Name`, `Long Name`, `2-alpha code`, `Currency Unit`, Region, `Income Group`, `Lending category`, `Government Accounting concept`)
+
+colnames(countries_hnp_keep) <- c("country_code", "short_name", "table_name", 
+                                  "long_name", "two_aplha_code", "currency_unit",
+                                  "region", "income_group","lending_category",
+                                  "government")
+
+colnames(dataset_hnp)[1:4] <- c("country_name", "country_code", "indicator_name", "indicator_code")
+
+# CHECKING
+# subset by general topic
+count_indicator_by_topic <- dataset_hnp %>% 
+  left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
+  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition) %>%
+  filter(country_name=="Arab World") %>%
+  count(gen_topic, sort = TRUE)
+# HEALTH and EDUCATION most common
+
+# checking names
+countries <- dataset_hnp %>%
+  select(country_name) %>%
+  unique() %>%
+  
+View(countries) # in dataset we have grouped countries
+                # by region, by income, etc
+
+# also in countries dataset
+# I filter countries with no currency unit: aggregations
+not_countries <- countries_hnp_keep %>% 
+  filter(is.na(currency_unit)) %>%
+  pull(table_name)
+
+length(not_countries) # 41
+
+real_countries <- countries_hnp_keep %>% 
+  filter(!is.na(currency_unit)) %>%
+  pull(table_name)
+
+#########################
+
+dataset_hnp_education = dataset_hnp %>% 
+  left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
+  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition) %>%
+  filter(gen_topic=="Education") %>%
+  filter(country_name %in% real_countries) %>%
+  gather(key = year, value = indicator_value, `1960`:`2017`) %>%
+  spread(key = indicator_code, value = indicator_value)
+
+############################
+# test to check the reshape: 
+
+dataset_hnp %>%
+  filter(country_name=="Arab World", indicator_code=="SE.ADT.LITR.FE.ZS") %>%
+  select(`1984`)
+
+dataset_hnp_education %>%
+  filter(country_name=="Arab World", year=="1984") %>%
+  select(SE.ADT.LITR.FE.ZS)
+############################
+
+dataset_hnp_health = dataset_hnp %>% 
+  left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
+  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition) %>%
+  filter(gen_topic=="Health") %>% 
+  filter(country_name %in% real_countries) %>%
+  gather(key = year, value = indicator_value, `1960`:`2017`) %>%
+  spread(key = indicator_code, value = indicator_value)
+
+```
+
+
+## Example HIV
+```{r}
+indicators_hnp_keep %>%
+  filter(series_code=="SH.DYN.AIDS") %>%
+  pull(long_definition)
+# Adults living with HIV refers to the number of people ages 15-49 
+# who are infected with HIV.
+
+dataset_hnp_health %>% 
+  select(country_name, year, SH.DYN.AIDS) %>%
+  group_by(country_name) %>%
+  summarize(aids=mean(SH.DYN.AIDS, na.rm=TRUE)) %>%
+  filter(!is.na(aids)) %>%
+  arrange(desc(aids))
+
+dataset_hnp_health %>%
+  filter(country_name=="Nigeria") %>%
+  select(country_name, year, SH.DYN.AIDS) %>%
+  filter(!is.na(SH.DYN.AIDS)) %>%
+  mutate(year = as.integer(year)) %>%
+  ggplot(aes(x=year, y=SH.DYN.AIDS)) +
+  geom_line() +
+  ylab("Number of people") +
+  ggtitle("Evolution of the number of people infected with HIV in Nigeria")
+
+
+aids_countries <- dataset_hnp_health %>% 
+  select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
+  group_by(country_code) %>%
+  summarize(aids=mean(SH.DYN.AIDS, na.rm=TRUE),
+            total_pop = mean(SP.POP.TOTL)) %>%
+  mutate(prop_aids = aids/total_pop) %>%
+  filter(!is.na(aids)) %>%
+  arrange(desc(aids))
+
+map_world <- map_data("world") %>%
+  filter(region!="Antarctica", 
+         region!="French Southern and Antarctic Lands")%>% 
+  select(region) %>%
+  unique()
+
+pdf(here::here("figures/mapa11.pdf"), height = 8, width = 18)
+aids_countries %>%
+  inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
+  right_join(world, by = c(mapname = "region")) %>%
+  ggplot(aes(long, lat, group=group, fill= prop_aids)) +
+  geom_polygon() +
+  theme_map() +
+  coord_cartesian(ylim = c(-50, 90)) 
+dev.off()
+```
+
+```{r}
+indicators = indicators_hnp_keep %>%
+  select(indicator_name)
+
+View(indicators)
+
+dataset_hnp %>% 
+  filter(country_name=="Arab World") %>%
+  left_join(indicators_hnp_keep, 
+            by = c("indicator_code"="series_code")) %>%
+  select(-topic, -indicator_name.y, -long_definition) %>%
+  filter(gen_topic=="Health") %>%
+  pull(indicator_name.x)
+
+
+
+```
+
+
+
