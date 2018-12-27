@@ -1,24 +1,35 @@
 ---
-title: "Health Nutrition and Population Statistics inform"
+title: "Health Nutrition and Population Statistics report"
 author: "Violeta Roizman"
 date: "23 de diciembre de 2018"
 output: pdf_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+# data science workflow
 library(tidyverse)
+library(ggthemes) # ggplot2
 library(here)
+
+# maps
 library(ggmap)
 library(maps)
-library(ggthemes)
+
+# embedding
+library(umap)
 ```
 
-## Importing the data
+This is the result of an analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. A Shiny App showing all the interesting visualizations can be accessed here. 
+
+I focused the analysis on the male/female.
+
+## Importing and tidying the data
 
 Of course first of all we import the data, we do this with the `readr` package.
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 countries_hnp <- read_csv(here::here("data", "HNP_StatsCountry.csv"))
 
 dataset_hnp <- read_csv(here::here("data", "HNP_StatsData.csv")) %>%
@@ -27,30 +38,42 @@ dataset_hnp <- read_csv(here::here("data", "HNP_StatsData.csv")) %>%
 indicators_hnp <- read_csv(here::here("data", "HNP_StatsSeries.csv"))
 ```
 
-# Tidying the data
 
-We tidy the data with `dplyr` and `tidyr`. We select the columns we care about.
+We tidy the data with `dplyr`, `stringr` and `tidyr` from the `tidyverse`. We select the columns we care about.
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 # select relevant variables and rename variables
-indicators_hnp_keep = indicators_hnp %>%
+
+# INDICATORS
+indicators_hnp_keep <- indicators_hnp %>%
   select(`Series Code`, `Topic`, `Indicator Name`, `Long definition`)
 
-colnames(indicators_hnp_keep) <- c("series_code", "topic", "indicator_name", "long_definition")
+# I change the names because I like it better without spaces
+colnames(indicators_hnp_keep) <- colnames(indicators_hnp_keep) %>%
+  str_to_lower() %>%
+  str_replace(" ", "_")
+
+# extract to have more general clasification
+split_topic <- str_split(indicators_hnp_keep$topic, pattern = ":")
 
 indicators_hnp_keep <- indicators_hnp_keep %>%
-  mutate(gen_topic = map_chr(str_split(indicators_hnp_keep$topic, pattern = ":"), 
-                             ~.x[1]))
+  mutate(gen_topic = map_chr(split_topic, 
+                             ~.x[1]),
+         part_topic = map_chr(split_topic, 
+                             ~.x[2]))
 
+# COUNTRIES
 countries_hnp_keep <- countries_hnp %>%
   select(`Country Code`, `Short Name`, `Table Name`, `Long Name`, `2-alpha code`, `Currency Unit`, Region, `Income Group`, `Lending category`, `Government Accounting concept`)
 
-colnames(countries_hnp_keep) <- c("country_code", "short_name", "table_name", 
-                                  "long_name", "two_aplha_code", "currency_unit",
-                                  "region", "income_group","lending_category",
-                                  "government")
+colnames(countries_hnp_keep) <- colnames(countries_hnp_keep) %>%
+  str_to_lower() %>%
+  str_replace(" ", "_")
 
-colnames(dataset_hnp)[1:4] <- c("country_name", "country_code", "indicator_name", "indicator_code")
+# DATASET
+colnames(dataset_hnp)[1:4] <- colnames(dataset_hnp)[1:4] %>%
+  str_to_lower() %>%
+  str_replace(" ", "_")
 
 # CHECKING
 # subset by general topic
@@ -64,7 +87,7 @@ count_indicator_by_topic <- dataset_hnp %>%
 # checking names
 countries <- dataset_hnp %>%
   select(country_name) %>%
-  unique() %>%
+  unique() 
   
 View(countries) # in dataset we have grouped countries
                 # by region, by income, etc
@@ -83,6 +106,8 @@ real_countries <- countries_hnp_keep %>%
 
 #########################
 
+# I reshape with gather and spread
+# because it is handful to have indicators as features
 dataset_hnp_education = dataset_hnp %>% 
   left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
   select(-topic, -indicator_name.x, -indicator_name.y, -long_definition) %>%
@@ -111,11 +136,16 @@ dataset_hnp_health = dataset_hnp %>%
   gather(key = year, value = indicator_value, `1960`:`2017`) %>%
   spread(key = indicator_code, value = indicator_value)
 
+# Save the tidy datasets
+write_csv(dataset_hnp_health, 
+          here::here("data", "dataset_hnp_health_exp.csv"))
+write_csv(dataset_hnp_education, 
+          here::here("data", "dataset_hnp_education_exp.csv"))
 ```
 
 
 ## Example HIV
-```{r}
+```{r, warning=FALSE}
 indicators_hnp_keep %>%
   filter(series_code=="SH.DYN.AIDS") %>%
   pull(long_definition)
@@ -177,12 +207,130 @@ dataset_hnp %>%
   left_join(indicators_hnp_keep, 
             by = c("indicator_code"="series_code")) %>%
   select(-topic, -indicator_name.y, -long_definition) %>%
-  filter(gen_topic=="Health") %>%
+  filter(gen_topic!="Education", gen_topic!="Health") %>%
   pull(indicator_name.x)
 
+# HEALTH:
+
+# knowledge HIV, female/male
+# ado fertility rate
+# % people HIV, nuevos infectados , adults, adults nuevos infectados
+# children HIV, children new infected, huerfanos por hiv 
+# age first marriage
+# population age i , for all 0<=i<=25
+# % pregnagnt women with HIV treated
+# edad dependency ratio?, old, young
+# AIDS deaths
+# ARI treatment (% of children under 5 taken to a health provider)
+# birth rate
+# Births attended by skilled health staff 
+# Capital health expenditure
+# cause of death communicable, mother or injury or 
+# Current health expenditure
+# diarrea
+# People with basic handwashing facilities
+# drinking water, sanitation facilities
+# "Community health workers (per 1,000 people)"
+#Exclusive breastfeeding
+# # hospital beds
+# inmunization
+# life expectancy
+# risk of maternal death
+# low weight babies
+# malaria
+# mortality rate water
+# Number of people who are undernourished
+# # nurses
+# People practicing open defecation
+# # physicians
+# suicides
+# alcohol
+# tuberculosis
 
 
+# FEMALE/MALE:
+# knowledge hiv
+# hiv
+# Comprehensive correct knowledge of HIV/AIDS youngs
+# Condom use with non regular partner
+# age first marriage
+# population age i , for all 0<=i<=25
+# % pregnagnt women with HIV treated
+# birth rate
+# Births attended by skilled health staff 
+# Completeness of birth registration (%)
+# Contraceptive prevalence, any methods
+# Contraceptive prevalence, modern methods
+# female polulation ranges
+# fertility rates
+# malnutrition
+# maternal leave benefits
+# maternal mortality
+# Mortality rate attributed to unintentional poisoning
+# Pregnant women receiving prenatal care (%
+# anemia
+# overweight 
+# smoking
+# teenage mother
+# married before 18
+
+# EDUCATION:
+# male/fem:
+# literacy rate
+# Primary completion rate
+# School enrollment, primary, secondary, tertiary
+# 
+# public spending
+
+# OTHERS:
+# GNI
+# HCI
+# labor force
+# unemployment
 ```
 
+
+# UMAP embedding
+```{r}
+indicators_hnp_keep %>%
+  filter(gen_topic == "Health") %>%
+  pull(part_topic) %>%
+  unique()
+
+comparable_health_indicators <- indicators_hnp_keep %>%
+  filter(str_detect(indicator_name, "%"),
+         gen_topic == "Health",
+         ! part_topic %in% " Population") %>%
+  pull(series_code)
+
+an_year <- 2014
+
+dataset_comparable_health <- dataset_hnp_health %>%
+  filter(year == an_year) %>%
+  select(country_name, country_code, one_of(comparable_health_indicators))  %>%
+  select_if(function(x) (sum(is.na(x)) <= (0.2 * length(x))) || is.character(x)) %>%
+  drop_na()
+
+View(dataset_comparable_health)
+  
+data_to_umap <- as.matrix(dataset_comparable_health[, 3:ncol(dataset_comparable_health)])
+data_health_umap = umap(data_to_umap)
+
+nrow(data_to_umap)
+
+data_umap_health = tibble(x = data_health_umap$layout[, 1], 
+                          y = data_health_umap$layout[, 2],
+                          country = dataset_comparable_health$country_code)
+
+data_umap_health <- data_umap_health %>%
+  left_join(countries_hnp_keep, by = c("country"= "country_code")) %>%
+  select(x, y, country, region)
+
+data_umap_health %>% 
+  ggplot(aes(x, y, color= region, label = country)) +
+  geom_point() +
+  geom_text(aes(label=country),hjust=0, vjust=0) +
+  theme_void()
+```
 
 
