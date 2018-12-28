@@ -17,7 +17,15 @@ library(ggthemes)
 # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
   
-  datasetInput <- read_csv(here::here("data", "dataset_hnp_health_exp.csv"))
+  dataseth_input <- read_csv(here::here("data", "dataset_hnp_health_exp.csv"))
+  
+  indicators_input <- read_csv(here::here("data", "indicators_hnp_exp.csv"))
+  
+  comparable_health_indicators <- indicators_input %>%
+    filter(str_detect(indicator_name, "%"),
+           gen_topic == "Health",
+           ! part_topic %in% " Population") %>%
+    pull(series_code)
   
   map_world <- map_data("world") %>%
     filter(region!="Antarctica", 
@@ -25,11 +33,11 @@ shinyServer(function(input, output) {
   
   output$coloredmap <- renderPlot({
      
-    anio <- input$year
-    
-    aids_countries <- datasetInput %>% 
+    an_year_1 <- input$year1
+
+    aids_countries <- dataseth_input %>% 
        select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
-       filter(year == anio) %>%
+       filter(year == an_year_1) %>%
        mutate(proportion_aids = SH.DYN.AIDS / SP.POP.TOTL) %>%
        filter(!is.na(proportion_aids)) 
      
@@ -46,4 +54,36 @@ shinyServer(function(input, output) {
        theme_map() +
        coord_cartesian(ylim = c(-50, 90)) 
   })
+  
+  output$pumap <- renderPlot({
+    
+    an_year_2 <- input$year2
+    
+    dataset_comparable_health <- dataseth_input %>%
+      filter(year == an_year_2) %>%
+      select(country_name, country_code, one_of(comparable_health_indicators))  %>%
+      select_if(function(x) (sum(is.na(x)) <= (0.2 * length(x))) || is.character(x)) %>%
+      drop_na()
+    
+    data_to_umap <- as.matrix(dataset_comparable_health[, 3:ncol(dataset_comparable_health)])
+    
+    data_health_umap <- umap(data_to_umap)
+    
+    data_umap_health <- tibble(x = data_health_umap$layout[, 1], 
+                               y = data_health_umap$layout[, 2],
+                               country = dataset_comparable_health$country_code)
+    
+    # esto se puede optimizar poniendolo desde el principio en dataset
+    data_umap_health <- data_umap_health %>%
+      left_join(countries_hnp_keep, by = c("country"= "country_code")) %>%
+      select(x, y, country, region)
+    
+    #pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
+    data_umap_health %>% 
+      ggplot(aes(x, y, color= region, label = country)) +
+      geom_point() +
+      geom_text(aes(label=country),hjust=0, vjust=0) +
+      theme_void()
+  })
+  
 })

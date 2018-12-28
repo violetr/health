@@ -89,7 +89,7 @@ countries <- dataset_hnp %>%
   select(country_name) %>%
   unique() 
   
-View(countries) # in dataset we have grouped countries
+#View(countries) # in dataset we have grouped countries
                 # by region, by income, etc
 
 # also in countries dataset
@@ -98,7 +98,7 @@ not_countries <- countries_hnp_keep %>%
   filter(is.na(currency_unit)) %>%
   pull(table_name)
 
-length(not_countries) # 41
+#length(not_countries) # 41
 
 real_countries <- countries_hnp_keep %>% 
   filter(!is.na(currency_unit)) %>%
@@ -110,7 +110,7 @@ real_countries <- countries_hnp_keep %>%
 # because it is handful to have indicators as features
 dataset_hnp_education = dataset_hnp %>% 
   left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
-  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition) %>%
+  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition, -part_topic) %>%
   filter(gen_topic=="Education") %>%
   filter(country_name %in% real_countries) %>%
   gather(key = year, value = indicator_value, `1960`:`2017`) %>%
@@ -120,17 +120,17 @@ dataset_hnp_education = dataset_hnp %>%
 # test to check the reshape: 
 
 dataset_hnp %>%
-  filter(country_name=="Arab World", indicator_code=="SE.ADT.LITR.FE.ZS") %>%
+  filter(country_name=="Afghanistan", indicator_code=="SE.ADT.LITR.FE.ZS") %>%
   select(`1984`)
 
 dataset_hnp_education %>%
-  filter(country_name=="Arab World", year=="1984") %>%
+  filter(country_name=="Afghanistan", year=="1984") %>%
   select(SE.ADT.LITR.FE.ZS)
 ############################
 
 dataset_hnp_health = dataset_hnp %>% 
   left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
-  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition) %>%
+  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition, -part_topic) %>%
   filter(gen_topic=="Health") %>% 
   filter(country_name %in% real_countries) %>%
   gather(key = year, value = indicator_value, `1960`:`2017`) %>%
@@ -141,11 +141,13 @@ write_csv(dataset_hnp_health,
           here::here("data", "dataset_hnp_health_exp.csv"))
 write_csv(dataset_hnp_education, 
           here::here("data", "dataset_hnp_education_exp.csv"))
+write_csv(indicators_hnp_keep,
+          here::here("data", "indicators_hnp_exp.csv"))
 ```
 
 
 ## Example HIV
-```{r, warning=FALSE}
+```{r, echo=FALSE}
 indicators_hnp_keep %>%
   filter(series_code=="SH.DYN.AIDS") %>%
   pull(long_definition)
@@ -169,7 +171,27 @@ dataset_hnp_health %>%
   ylab("Number of people") +
   ggtitle("Evolution of the number of people infected with HIV in Nigeria")
 
-
+    anio <- input$year
+    
+    aids_countries <- datasetInput %>% 
+       select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
+       filter(year == anio) %>%
+       mutate(proportion_aids = SH.DYN.AIDS / SP.POP.TOTL) %>%
+       filter(!is.na(proportion_aids)) 
+     
+    # fix scale 
+    # 
+     aids_countries %>%
+       inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
+       right_join(world, by = c(mapname = "region")) %>%
+       ggplot(aes(long, lat, group=group, fill= proportion_aids)) +
+       scale_fill_gradient2(low="blue", high="red", 
+                            midpoint = 0.1, , limits=c(0, 0.18),
+                            labels= scales::percent_format()) +
+       geom_polygon() +
+       theme_map() +
+       coord_cartesian(ylim = c(-50, 90)) 
+     
 aids_countries <- dataset_hnp_health %>% 
   select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
   group_by(country_code) %>%
@@ -182,25 +204,23 @@ aids_countries <- dataset_hnp_health %>%
 map_world <- map_data("world") %>%
   filter(region!="Antarctica", 
          region!="French Southern and Antarctic Lands")%>% 
-  select(region) %>%
-  unique()
 
-pdf(here::here("figures/mapa11.pdf"), height = 8, width = 18)
+# pdf(here::here("figures/mapa11.pdf"), height = 8, width = 18)
 aids_countries %>%
   inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
-  right_join(world, by = c(mapname = "region")) %>%
+  right_join(map_world, by = c(mapname = "region")) %>%
   ggplot(aes(long, lat, group=group, fill= prop_aids)) +
   geom_polygon() +
   theme_map() +
   coord_cartesian(ylim = c(-50, 90)) 
-dev.off()
+# dev.off()
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 indicators = indicators_hnp_keep %>%
   select(indicator_name)
 
-View(indicators)
+#View(indicators)
 
 dataset_hnp %>% 
   filter(country_name=="Arab World") %>%
@@ -291,46 +311,51 @@ dataset_hnp %>%
 
 
 # UMAP embedding
-```{r}
-indicators_hnp_keep %>%
-  filter(gen_topic == "Health") %>%
-  pull(part_topic) %>%
-  unique()
 
+With the `umap` package we embed the dataset with health features to 2D to visualize the neighborhoods.
+
+```{r, echo=FALSE}
+# UMAP embedding for a year, health
+
+an_year <- 1995
+
+#indicators_hnp_keep %>%
+#  filter(gen_topic == "Health") %>%
+#  pull(part_topic) %>%
+#  unique()
+
+# I keep comparable indicators (%)
 comparable_health_indicators <- indicators_hnp_keep %>%
   filter(str_detect(indicator_name, "%"),
          gen_topic == "Health",
          ! part_topic %in% " Population") %>%
   pull(series_code)
 
-an_year <- 2014
-
 dataset_comparable_health <- dataset_hnp_health %>%
   filter(year == an_year) %>%
   select(country_name, country_code, one_of(comparable_health_indicators))  %>%
   select_if(function(x) (sum(is.na(x)) <= (0.2 * length(x))) || is.character(x)) %>%
   drop_na()
-
-View(dataset_comparable_health)
   
 data_to_umap <- as.matrix(dataset_comparable_health[, 3:ncol(dataset_comparable_health)])
-data_health_umap = umap(data_to_umap)
+data_health_umap <- umap(data_to_umap)
 
-nrow(data_to_umap)
+data_umap_health <- tibble(x = data_health_umap$layout[, 1], 
+                           y = data_health_umap$layout[, 2],
+                           country = dataset_comparable_health$country_code)
 
-data_umap_health = tibble(x = data_health_umap$layout[, 1], 
-                          y = data_health_umap$layout[, 2],
-                          country = dataset_comparable_health$country_code)
-
+# esto se puede optimizar poniendolo desde el principio en dataset
 data_umap_health <- data_umap_health %>%
   left_join(countries_hnp_keep, by = c("country"= "country_code")) %>%
   select(x, y, country, region)
 
+#pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
 data_umap_health %>% 
   ggplot(aes(x, y, color= region, label = country)) +
   geom_point() +
   geom_text(aes(label=country),hjust=0, vjust=0) +
   theme_void()
+#dev.off()
 ```
 
 
