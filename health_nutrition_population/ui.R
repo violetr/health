@@ -1,14 +1,9 @@
-#
-# This is the user-interface definition of a Shiny web application. You can
-# run the application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
+# mejorar mapa ggplotly o leafeat
+# agregar imagen fondo
 
 library(shiny)
 library(semantic.dashboard)
+library(shinyWidgets)
 
 # icon:  money bill alternate
 
@@ -28,12 +23,14 @@ shinyUI(
         selected = 1,
         tabItem(
           tabName = "home",
-          headerPanel("HNP Data Analysis for the UseR! Datathon"),
-          mainPanel(
+            box(
+            h1("HNP Data Analysis for the UseR!2019 Datathon", align = "center"),
+            img(src = "user2019.jpg", height = 40),
             h2("You can check some interesting visualizations that came out from the analysis of the Health, Nutrition and Population dataset 
                 holded by the World Bank Group blablablablablabla"),
-            h4("The code to generate this App is available here ")
-          )
+            p("The code to generate this App is available", 
+            a("here.", href = "http://shiny.rstudio.com"))
+            )
         ),
         tabItem(
           tabName = "map",
