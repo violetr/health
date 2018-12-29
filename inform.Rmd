@@ -16,6 +16,7 @@ library(here)
 # maps
 library(ggmap)
 library(maps)
+library(plotly)
 
 # embedding
 library(umap)
@@ -145,6 +146,11 @@ write_csv(indicators_hnp_keep,
           here::here("data", "indicators_hnp_exp.csv"))
 ```
 
+```{r}
+dataseth_hnp_health <- read_csv(here::here("data", "dataset_hnp_health_exp.csv"))
+  
+indicators_hnp_keep <- read_csv(here::here("data", "indicators_hnp_exp.csv"))
+```
 
 ## Example HIV
 ```{r, echo=FALSE}
@@ -171,48 +177,33 @@ dataset_hnp_health %>%
   ylab("Number of people") +
   ggtitle("Evolution of the number of people infected with HIV in Nigeria")
 
-    anio <- input$year
-    
-    aids_countries <- datasetInput %>% 
-       select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
-       filter(year == anio) %>%
-       mutate(proportion_aids = SH.DYN.AIDS / SP.POP.TOTL) %>%
-       filter(!is.na(proportion_aids)) 
-     
-    # fix scale 
-    # 
-     aids_countries %>%
-       inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
-       right_join(world, by = c(mapname = "region")) %>%
-       ggplot(aes(long, lat, group=group, fill= proportion_aids)) +
-       scale_fill_gradient2(low="blue", high="red", 
-                            midpoint = 0.1, , limits=c(0, 0.18),
-                            labels= scales::percent_format()) +
-       geom_polygon() +
-       theme_map() +
-       coord_cartesian(ylim = c(-50, 90)) 
+
      
 aids_countries <- dataset_hnp_health %>% 
-  select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
-  group_by(country_code) %>%
-  summarize(aids=mean(SH.DYN.AIDS, na.rm=TRUE),
-            total_pop = mean(SP.POP.TOTL)) %>%
-  mutate(prop_aids = aids/total_pop) %>%
-  filter(!is.na(aids)) %>%
-  arrange(desc(aids))
+       select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
+       filter(year == 2000) %>%
+       mutate(proportion_aids = SH.DYN.AIDS / SP.POP.TOTL) %>%
+       filter(!is.na(proportion_aids)) 
 
 map_world <- map_data("world") %>%
   filter(region!="Antarctica", 
-         region!="French Southern and Antarctic Lands")%>% 
+         region!="French Southern and Antarctic Lands") 
 
 # pdf(here::here("figures/mapa11.pdf"), height = 8, width = 18)
-aids_countries %>%
+cloro <- aids_countries %>%
   inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
-  right_join(map_world, by = c(mapname = "region")) %>%
-  ggplot(aes(long, lat, group=group, fill= prop_aids)) +
+  right_join(world, by = c(mapname = "region")) %>%
+  ggplot(aes(long, lat, group=group, fill= proportion_aids, text=paste0(mapname))) +
+  scale_fill_gradient2(low="blue", high="red", 
+                      midpoint = 0.1, , limits=c(0, 0.18),
+                      labels= scales::percent_format()) +
   geom_polygon() +
   theme_map() +
   coord_cartesian(ylim = c(-50, 90)) 
+
+cloro %>%
+  ggplotly(tooltip = "text") %>%
+  style(hoverlabel = list(bgcolor = "white"), hoveron = "fill")
 # dev.off()
 ```
 

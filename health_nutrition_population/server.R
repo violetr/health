@@ -13,6 +13,7 @@ library(here)
 library(ggmap)
 library(maps)
 library(ggthemes)
+library(umap)
 
 # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
@@ -31,7 +32,7 @@ shinyServer(function(input, output) {
     filter(region!="Antarctica", 
            region!="French Southern and Antarctic Lands")
   
-  output$coloredmap <- renderPlot({
+  output$coloredmap <- renderPlotly({
      
     an_year_1 <- input$year1
 
@@ -43,16 +44,20 @@ shinyServer(function(input, output) {
      
     # fix scale 
     # 
-     aids_countries %>%
-       inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
-       right_join(world, by = c(mapname = "region")) %>%
-       ggplot(aes(long, lat, group=group, fill= proportion_aids)) +
-       scale_fill_gradient2(low="blue", high="red", 
-                            midpoint = 0.1, , limits=c(0, 0.18),
-                            labels= scales::percent_format()) +
-       geom_polygon() +
-       theme_map() +
-       coord_cartesian(ylim = c(-50, 90)) 
+    cloro <- aids_countries %>%
+      inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
+      right_join(world, by = c(mapname = "region")) %>%
+      ggplot(aes(long, lat, group=group, fill= proportion_aids, text=paste0(mapname))) +
+      scale_fill_gradient2(low="blue", high="red", 
+                           midpoint = 0.1, , limits=c(0, 0.18),
+                           labels= scales::percent_format()) +
+      geom_polygon() +
+      theme_map() +
+      coord_cartesian(ylim = c(-50, 90)) 
+    
+    cloro %>%
+      ggplotly(tooltip = "text") %>%
+      style(hoverlabel = list(bgcolor = "white"), hoveron = "fill") 
   })
   
   output$pumap <- renderPlot({
