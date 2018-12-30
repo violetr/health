@@ -71,7 +71,7 @@ shinyUI(
                           "Select a year:",
                           min = 1995,
                           max = 2015,
-                          value = 2000
+                          value = 2000, sep=""
               )
             ),
             column(width=12,
