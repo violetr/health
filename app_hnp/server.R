@@ -1,19 +1,14 @@
-#
-# This is the server logic of a Shiny web application. You can run the 
-# application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-# 
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
+library(semantic.dashboard)
 library(tidyverse)
+library(crosstalk)
 library(here)
 library(ggmap)
 library(maps)
 library(ggthemes)
 library(umap)
+library(leaflet)
+library(geojsonio)
 
 # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
@@ -28,11 +23,9 @@ shinyServer(function(input, output) {
            ! part_topic %in% " Population") %>%
     pull(series_code)
   
-  map_world <- map_data("world") %>%
-    filter(region!="Antarctica", 
-           region!="French Southern and Antarctic Lands")
+  countries_geo <- readRDS(here::here("app_hnp","data","countries_simple.rds"))
   
-  output$coloredmap <- renderPlotly({
+  output$coloredmap <- renderLeaflet({
      
     an_year_1 <- input$year1
 
@@ -40,24 +33,36 @@ shinyServer(function(input, output) {
        select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
        filter(year == an_year_1) %>%
        mutate(proportion_aids = SH.DYN.AIDS / SP.POP.TOTL) %>%
-       filter(!is.na(proportion_aids)) 
+       filter(!is.na(proportion_aids)) %>%
+      select(-year)
      
-    # fix scale 
-    # 
-    cloro <- aids_countries %>%
-      inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
-      right_join(world, by = c(mapname = "region")) %>%
-      ggplot(aes(long, lat, group=group, fill= proportion_aids, text=paste0(mapname))) +
-      scale_fill_gradient2(low="blue", high="red", 
-                           midpoint = 0.1, , limits=c(0, 0.18),
-                           labels= scales::percent_format()) +
-      geom_polygon() +
-      theme_map() +
-      coord_cartesian(ylim = c(-50, 90)) 
+    countries_geo@data <- countries_geo@data %>%
+      left_join(aids_countries, by= c("ISO_A3"="country_code")) %>%
+      select(ADMIN, ISO_A3, proportion_aids)
     
-    cloro %>%
-      ggplotly(tooltip = "text") %>%
-      style(hoverlabel = list(bgcolor = "white"), hoveron = "fill") 
+    leaflet(data = countries_geo) %>%
+      setView(0, 37.8, 1.3) %>%
+      addProviderTiles("MapBox", options = providerTileOptions(
+        id = "mapbox.light",
+        accessToken = Sys.getenv('MAPBOX_ACCESS_TOKEN'))) %>%
+      addPolygons(fillColor = ~binpal(proportion_aids),
+                  weight = 2,
+                  opacity = 1,
+                  color = "white",
+                  dashArray = "2",
+                  fillOpacity = 0.7,
+                  highlight = highlightOptions(
+                    weight = 2,
+                    color = "#999",
+                    dashArray = "",
+                    fillOpacity = 0.7,
+                    bringToFront = TRUE),
+                  label = countries_geo$ADMIN,
+                  labelOptions = labelOptions(
+                    style = list("font-weight" = "normal", padding = "3px 8px"),
+                    textsize = "15px",
+                    direction = "auto"))
+    
   })
   
   output$pumap <- renderPlot({
