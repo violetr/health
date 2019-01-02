@@ -138,7 +138,8 @@ dataset_hnp_health = dataset_hnp %>%
   filter(gen_topic=="Health") %>% 
   filter(country_name %in% real_countries) %>%
   gather(key = year, value = indicator_value, `1960`:`2017`) %>%
-  spread(key = indicator_code, value = indicator_value)
+  spread(key = indicator_code, value = indicator_value) %>%
+  left_join(countries_hnp_keep, by = c("country_code"= "country_code")) 
 
 # Save the tidy datasets
 write_csv(dataset_hnp_health, 
@@ -147,6 +148,9 @@ write_csv(dataset_hnp_education,
           here::here("data", "dataset_hnp_education_exp.csv"))
 write_csv(indicators_hnp_keep,
           here::here("data", "indicators_hnp_exp.csv"))
+write_csv(countries_hnp_keep,
+          here::here("data", "countries_hnp_exp.csv"))
+
 ```
 
 ```{r}
@@ -228,6 +232,8 @@ countries_geo <- geojsonio::geojson_read(here::here("app_hnp","www", "countries.
 countries_simple <- rmapshaper::ms_simplify(countries_geo, keep = 0.05, keep_shapes = TRUE)
 saveRDS(countries_simple, file = "app_hnp/data/countries_simple.rds")
 
+sd <- SharedData$new(countries_simple)
+
 countries_geo@data <- countries_geo@data %>%
   left_join(aids_countries, by= c("ISO_A3"="country_code")) %>%
   select(ADMIN, ISO_A3, proportion_aids)
@@ -259,10 +265,70 @@ leaflet(data = countries_geo) %>%
 ```
 
 ```{r, echo=FALSE, eval=FALSE}
-indicators = indicators_hnp_keep %>%
-  select(indicator_name)
+indicators_hnp_keep %>%
+  filter(str_detect(indicator_name, "Malnutrition")) %>%
+  pull(indicator_name)
 
-#View(indicators)
+SN.ITK.DEFC/SP.POP.TOTL
+
+indicators_hnp_keep %>%
+  filter(part_topic=="Population") %>%
+  unique() %>%
+  pull(series_code)
+
+indicators_hnp_keep %>%
+  filter(series_code=="SN.ITK.DEFC") %>%
+  pull(long_definition)
+
+dataset_hnp_health %>% 
+    select(country_code, year, SN.ITK.DEFC, SP.POP.TOTL) %>%
+  mutate(test=SN.ITK.DEFC/SP.POP.TOTL) %>%
+  filter(test>1) %>%
+  select(country_code) %>%
+  unique()
+
+dataset_hnp_health %>% 
+    select(country_code, year, SN.ITK.DEFC, SP.POP.TOTL) %>%
+  mutate(test=SN.ITK.DEFC/SP.POP.TOTL) %>%
+  filter(test>1) %>%
+  select(country_code) %>%
+  unique()
+
+# OUTLIER, MISTAKE
+
+# KIR y DMA
+
+dataset_hnp %>%
+  filter(indicator_code=="SN.ITK.DEFC",
+         country_code=="KIR")
+
+dataset_hnp %>%
+  filter(indicator_code=="SP.POP.TOTL",
+         country_code=="DMA") %>%
+  select(`2000`)
+# 
+
+
+# Literacy
+
+# "SE.ADT.1524.LT.FM.ZS" "SE.ADT.1524.LT.MA.ZS" "SE.ADT.1524.LT.ZS"   
+# "SE.ADT.LITR.FE.ZS"    "SE.ADT.LITR.MA.ZS"    "SE.ADT.LITR.ZS"  
+
+# OVERWEIGHT:
+
+# "Prevalence of overweight, female (% of female adults)"                      
+# "Prevalence of overweight, male (% of male adults)"                          
+# "Prevalence of overweight (% of adults)"                                     
+# "Prevalence of overweight, weight for height, female (% of children under 5)"
+# "Prevalence of overweight, weight for height, male (% of children under 5)"  
+# "Prevalence of overweight, weight for height (% of children under 5)" 
+
+#"SH.STA.OWAD.FE.ZS" "SH.STA.OWAD.MA.ZS" "SH.STA.OWAD.ZS"   
+#"SH.STA.OWGH.FE.ZS" "SH.STA.OWGH.MA.ZS" "SH.STA.OWGH.ZS" 
+
+# Number of people who are undernourished "SN.ITK.DEFC"
+
+
 
 dataset_hnp %>% 
   filter(country_name=="Arab World") %>%
@@ -301,7 +367,7 @@ dataset_hnp %>%
 # low weight babies
 # malaria
 # mortality rate water
-# Number of people who are undernourished
+# Number of people who are undernourished "SN.ITK.DEFC"
 # # nurses
 # People practicing open defecation
 # # physicians
@@ -400,4 +466,43 @@ data_umap_health %>%
 #dev.off()
 ```
 
+### Obesity
+
+```{r}
+SH.STA.OWAD.ZS
+
+obesity <- dataset_hnp_health %>% 
+  select(country_code, year, SH.STA.OWAD.ZS) %>% 
+  rename(proportion_obesity = SH.STA.OWAD.ZS) %>%
+  filter(!is.na(proportion_obesity)) %>%
+  left_join(countries_hnp_keep, by = c("country_code"= "country_code")) %>%
+  select(country_code, year, proportion_obesity, region)
+  
+ggplot(obesity) + 
+  geom_line(aes(x = year, 
+                y = proportion_obesity, 
+                group = country_code, 
+                color=region)) +
+  scale_x_discrete(breaks=c(1975,1990,2005, 2016)) +
+  ylab("overweight in adults (%)") +
+  theme_bw()
+
+oudata <- dataset_hnp_health %>% 
+  select(country_code, year, SH.STA.OWAD.ZS, SN.ITK.DEFC, SP.POP.TOTL) %>% 
+  mutate(overweighted = SH.STA.OWAD.ZS/100, 
+         undernourished = SN.ITK.DEFC/SP.POP.TOTL) %>%
+  filter(!is.na(overweighted),
+         !is.na(undernourished),
+         country_code!="KIR", # BUG/OUTLIER
+         country_code!="DMA",
+         country_code!="VCT") %>%
+  left_join(countries_hnp_keep, by = c("country_code"= "country_code")) %>%
+  select(country_code, year, overweighted, undernourished, region) %>%
+  gather(key="measure",
+         value="value",
+         c("overweighted", "undernourished"))
+
+saveRDS(oudata, here::here("data", "overweigh_undernourish.rds"))
+  
+```
 

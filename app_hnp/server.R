@@ -9,91 +9,157 @@ library(ggthemes)
 library(umap)
 library(leaflet)
 library(geojsonio)
+library(htmltools)
+library(gghighlight)
 
-# Define server logic required to draw a histogram
+# Define server logic
 shinyServer(function(input, output) {
-  
+
+  ### read data ####
+
+  # despues filtrar solo variables utilizadas
   dataseth_input <- read_csv(here::here("data", "dataset_hnp_health_exp.csv"))
-  
+
   indicators_input <- read_csv(here::here("data", "indicators_hnp_exp.csv"))
-  
+
+  # countries_input <- read_csv(here::here("data", "countries_hnp_exp.csv"))
+
+  owundata_input <- readRDS(here::here("data", "overweigh_undernourish.rds"))
+
+  countries_geo <- readRDS(here::here("app_hnp", "data", "countries_simple.rds"))
+
+  ### common variables ####
+
+  # esto tambien puede hacerse antes y cargar
   comparable_health_indicators <- indicators_input %>%
-    filter(str_detect(indicator_name, "%"),
-           gen_topic == "Health",
-           ! part_topic %in% " Population") %>%
+    filter(
+      str_detect(indicator_name, "%"),
+      gen_topic == "Health",
+      !part_topic %in% " Population"
+    ) %>%
     pull(series_code)
-  
-  countries_geo <- readRDS(here::here("app_hnp","data","countries_simple.rds"))
-  
+
+  binpal <- colorBin("Reds", domain = c(0, 18), 9, pretty = FALSE)
+
+  ### choropleth ####
+
   output$coloredmap <- renderLeaflet({
-     
     an_year_1 <- input$year1
 
-    aids_countries <- dataseth_input %>% 
-       select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
-       filter(year == an_year_1) %>%
-       mutate(proportion_aids = SH.DYN.AIDS / SP.POP.TOTL) %>%
-       filter(!is.na(proportion_aids)) %>%
+    aids_countries <- dataseth_input %>%
+      select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
+      filter(year == an_year_1) %>%
+      mutate(proportion_aids = SH.DYN.AIDS / SP.POP.TOTL * 100) %>%
+      filter(!is.na(proportion_aids)) %>%
       select(-year)
-     
-    countries_geo@data <- countries_geo@data %>%
-      left_join(aids_countries, by= c("ISO_A3"="country_code")) %>%
+
+    countries_geo_year <- countries_geo
+
+    countries_geo_year@data <- countries_geo_year@data %>%
+      left_join(aids_countries, by = c("ISO_A3" = "country_code")) %>%
       select(ADMIN, ISO_A3, proportion_aids)
-    
-    leaflet(data = countries_geo) %>%
-      setView(0, 37.8, 1.3) %>%
+
+    labels_geo_year <-
+      paste0(
+        "<strong>", countries_geo_year$ADMIN, "</strong>",
+        ifelse(is.na(countries_geo_year$proportion_aids),
+          "",
+          paste0(
+            "<br/>",
+            round(countries_geo_year$proportion_aids, 2),
+            "%"
+          )
+        )
+      ) %>%
+      lapply(htmltools::HTML)
+
+    leaflet(data = countries_geo_year) %>%
+      setView(35, 37.8, 1.4) %>%
       addProviderTiles("MapBox", options = providerTileOptions(
         id = "mapbox.light",
-        accessToken = Sys.getenv('MAPBOX_ACCESS_TOKEN'))) %>%
-      addPolygons(fillColor = ~binpal(proportion_aids),
-                  weight = 2,
-                  opacity = 1,
-                  color = "white",
-                  dashArray = "2",
-                  fillOpacity = 0.7,
-                  highlight = highlightOptions(
-                    weight = 2,
-                    color = "#999",
-                    dashArray = "",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE),
-                  label = countries_geo$ADMIN,
-                  labelOptions = labelOptions(
-                    style = list("font-weight" = "normal", padding = "3px 8px"),
-                    textsize = "15px",
-                    direction = "auto"))
-    
+        accessToken = Sys.getenv("MAPBOX_ACCESS_TOKEN")
+      )) %>%
+      addPolygons(
+        fillColor = ~ binpal(proportion_aids),
+        weight = 2,
+        opacity = 1,
+        color = "white",
+        dashArray = "2",
+        fillOpacity = 0.7,
+        highlight = highlightOptions(
+          weight = 2,
+          color = "#999",
+          dashArray = "",
+          fillOpacity = 0.7,
+          bringToFront = TRUE
+        ),
+        label = labels_geo_year,
+        labelOptions = labelOptions(
+          style = list("font-weight" = "normal", padding = "3px 8px"),
+          textsize = "15px",
+          direction = "auto"
+        )
+      ) %>%
+      addLegend(
+        pal = binpal,
+        values = ~ (countries_geo_year$proportion_aids),
+        opacity = 0.7,
+        title = "incidence of HIV (%)",
+        position = "bottomright",
+        na.label = "No data"
+      )
   })
-  
+
+  output$time <- renderPlot({
+    out_region <- owundata_input %>%
+      filter(region != "Sub-Saharan Africa")
+    in_region <- owundata_input %>%
+      filter(region == "Sub-Saharan Africa")
+
+    ggplot() +
+      geom_line(
+        data = out_region, aes(year, value, group = country_code),
+        colour = alpha("grey", 0.65)
+      ) +
+      geom_line(data = in_region, aes(
+        x = year,
+        y = value,
+        group = country_code,
+        color = region
+      )) +
+      facet_wrap(~measure) +
+      scale_x_discrete(breaks = c(1975, 1990, 2005, 2016)) +
+      ylab("Percent of adults (%)")
+  })
+
+  ### UMAP embedding ####
+
   output$pumap <- renderPlot({
-    
     an_year_2 <- input$year2
-    
+
     dataset_comparable_health <- dataseth_input %>%
       filter(year == an_year_2) %>%
-      select(country_name, country_code, one_of(comparable_health_indicators))  %>%
+      select(country_name, country_code, region, one_of(comparable_health_indicators)) %>%
       select_if(function(x) (sum(is.na(x)) <= (0.2 * length(x))) || is.character(x)) %>%
       drop_na()
-    
-    data_to_umap <- as.matrix(dataset_comparable_health[, 3:ncol(dataset_comparable_health)])
-    
+
+    print(dataset_comparable_health)
+
+    data_to_umap <- as.matrix(dataset_comparable_health[, 4:ncol(dataset_comparable_health)])
+
     data_health_umap <- umap(data_to_umap)
-    
-    data_umap_health <- tibble(x = data_health_umap$layout[, 1], 
-                               y = data_health_umap$layout[, 2],
-                               country = dataset_comparable_health$country_code)
-    
-    # esto se puede optimizar poniendolo desde el principio en dataset
-    data_umap_health <- data_umap_health %>%
-      left_join(countries_hnp_keep, by = c("country"= "country_code")) %>%
-      select(x, y, country, region)
-    
-    #pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
-    data_umap_health %>% 
-      ggplot(aes(x, y, color= region, label = country)) +
+
+    data_umap_health <- tibble(
+      x = data_health_umap$layout[, 1],
+      y = data_health_umap$layout[, 2],
+      country = dataset_comparable_health$country_code,
+      region = dataset_comparable_health$region
+    )
+
+    data_umap_health %>%
+      ggplot(aes(x, y, color = region, label = country)) +
       geom_point() +
-      geom_text(aes(label=country),hjust=0, vjust=0) +
+      geom_text(aes(label = country), hjust = 0, vjust = 0) +
       theme_void()
   })
-  
 })

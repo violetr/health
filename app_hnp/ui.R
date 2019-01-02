@@ -1,12 +1,10 @@
-# mejorar mapa plotly o leafeat 
-# probar con leafeat
 # usar crosstalk para comparar obesidad y desnutricion
+# https://hrbrmstr.github.io/metricsgraphics/ para umap?
 
 library(shiny)
 library(semantic.dashboard)
-library(shinyWidgets)
 library(crosstalk)
-library(plotly)
+library(leaflet)
 
 # icon:  money bill alternate
 
@@ -27,21 +25,23 @@ shinyUI(
         tabItem(
           tabName = "home",
           fluidRow(
-            column(width=8, height="100%",
-                h1("HNP Analysis for the UseR!2019 Datathon", align = "center"),
-                # img(src = "user2019.jpg", height = 40),
-                h3("You can check some interesting visualizations that came out from the analysis of the Health, Nutrition and Population dataset 
+            column(
+              width = 8, height = "100%",
+              h1("HNP Analysis for the UseR!2019 Datathon", align = "center"),
+              # img(src = "user2019.jpg", height = 40),
+              h3("You can check some interesting visualizations that came out from the analysis of the Health, Nutrition and Population dataset 
                    holded by the World Bank Group blablablab lablabla"),
-                h3("You can navigate the menu to select the different analysis axis"),
-                br(), br(), br(), br(),br(),br(),br(),br(),
-                br(),br(),br(),br(),br(), br(), br(),
-                p(
-                  "The code to generate this App is available",
-                  a("here.", href = "http://shiny.rstudio.com")
-                )
-                ),
-            column(width=4, height="100%",
-                HTML('<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/p/BrvhJ1UHC4y/?utm_source=ig_embed&amp;utm_medium=loading" data-instgrm-version="12" style=" background:#FFF; border:0; border-radius:3px; box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15); margin: 1px; max-width:330px; min-width:326px; padding:0; width:99.375%; width:-webkit-calc(100% - 2px); width:calc(100% - 2px);"><div style="padding:16px;"> <a href="https://www.instagram.com/p/BrvhJ1UHC4y/?utm_source=ig_embed&amp;utm_medium=loading" style=" background:#FFFFFF; line-height:0; padding:0 0; text-align:center; text-decoration:none; width:100%;" target="_blank"> <div style=" display: flex; flex-direction: row; align-items: center;"> 
+              h3("You can navigate the menu to select the different analysis axis"),
+              br(), br(), br(), br(), br(), br(), br(), br(),
+              br(), br(), br(), br(), br(), br(), br(),
+              p(
+                "The code to generate this App is available",
+                a("here.", href = "http://shiny.rstudio.com")
+              )
+            ),
+            column(
+              width = 4, height = "100%",
+              HTML('<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/p/BrvhJ1UHC4y/?utm_source=ig_embed&amp;utm_medium=loading" data-instgrm-version="12" style=" background:#FFF; border:0; border-radius:3px; box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15); margin: 1px; max-width:330px; min-width:326px; padding:0; width:99.375%; width:-webkit-calc(100% - 2px); width:calc(100% - 2px);"><div style="padding:16px;"> <a href="https://www.instagram.com/p/BrvhJ1UHC4y/?utm_source=ig_embed&amp;utm_medium=loading" style=" background:#FFFFFF; line-height:0; padding:0 0; text-align:center; text-decoration:none; width:100%;" target="_blank"> <div style=" display: flex; flex-direction: row; align-items: center;"> 
                      <div style="background-color: #F4F4F4; border-radius: 50%; flex-grow: 0; height: 40px; margin-right: 14px; width: 40px;"></div> 
                      <div style="display: flex; flex-direction: column; flex-grow: 1; justify-content: center;"> 
                      <div style=" background-color: #F4F4F4; border-radius: 4px; flex-grow: 0; height: 14px; margin-bottom: 6px; width: 100px;"></div> <div style=" background-color: #F4F4F4; border-radius: 4px; flex-grow: 0; height: 14px; width: 60px;"></div></div></div>
@@ -54,56 +54,62 @@ shinyUI(
                      <div style=" background-color: #F4F4F4; border-radius: 50%; flex-grow: 0; height: 20px; width: 20px;"></div> <div style=" width: 0; height: 0; border-top: 2px solid transparent; border-left: 6px solid #f4f4f4; border-bottom: 2px solid transparent; transform: translateX(16px) translateY(-4px) rotate(30deg)"></div></div>
                      <div style="margin-left: auto;"> <div style=" width: 0px; border-top: 8px solid #F4F4F4; border-right: 8px solid transparent; transform: translateY(16px);"></div> <div style=" background-color: #F4F4F4; flex-grow: 0; height: 12px; width: 16px; transform: translateY(-4px);"></div> <div style=" width: 0; height: 0; border-top: 8px solid #F4F4F4; border-left: 8px solid transparent; transform: translateY(-4px) translateX(8px);"></div></div></div> 
                      <div style="display: flex; flex-direction: column; flex-grow: 1; justify-content: center; margin-bottom: 24px;"> <div style=" background-color: #F4F4F4; border-radius: 4px; flex-grow: 0; height: 14px; margin-bottom: 6px; width: 224px;"></div> <div style=" background-color: #F4F4F4; border-radius: 4px; flex-grow: 0; height: 14px; width: 144px;"></div></div></a></div></blockquote>
-                     <script async src="//www.instagram.com/embed.js"></script>')  
-                , align="center")
-            )
-            ),
-        tabItem(
-          tabName = "map",
-          
-          fluidRow(
-            # Sidebar with a slider input for number of bins
-            
-            
-            # Show a plot of the generated distribution
-            column(width=4,
-              sliderInput("year1",
-                          "Select a year:",
-                          min = 1995,
-                          max = 2015,
-                          value = 2000, sep=""
-              )
-            ),
-            column(width=12,
-              leafletOutput("coloredmap")
+                     <script async src="//www.instagram.com/embed.js"></script>'), align = "center"
             )
           )
         ),
         tabItem(
-          tabName = "umap",
+          tabName = "map",
+
           fluidRow(
             # Sidebar with a slider input for number of bins
-            
-            column(width = 5, h3("You can use the slider to select a year, 
-               you see in the map the proportion of people bla bla"), 
-                   sliderInput("year2",
-                               "Year:",
-                               min = 1995,
-                               max = 2015,
-                               value = 2000
-                   )),
-            
+
+
             # Show a plot of the generated distribution
-            column(width = 8,
+            column(
+              width = 4,
+              sliderInput("year1",
+                "Select a year:",
+                min = 1995,
+                max = 2015,
+                value = 2000, sep = ""
+              )
+            ),
+            column(
+              width = 12,
+              leafletOutput("coloredmap")
+            )
+          ),
+          fluidRow(plotOutput("time", width = "100%"))
+        ),
+        tabItem(
+          tabName = "umap",
+          fluidRow(
+            # Sidebar with a slider input 
+
+            column(
+              width = 5, h3("You can use the slider to select a year, 
+               you see in the map the proportion of people bla bla"),
+              sliderInput("year2",
+                "Year:",
+                min = 1995,
+                max = 2015,
+                value = 2000
+              )
+            ),
+
+            # Show a plot of the generated distribution
+            column(
+              width = 8,
               plotOutput("pumap", width = "100%")
             )
           )
         )
-            ),
+      ),
       theme = "paper"
-            ) # or paper, lumen
-        )
-      )
+    ) # or paper, lumen
+  )
+)
 
 
 
