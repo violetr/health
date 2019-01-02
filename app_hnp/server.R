@@ -40,7 +40,42 @@ shinyServer(function(input, output) {
     pull(series_code)
 
   binpal <- colorBin("Reds", domain = c(0, 18), 9, pretty = FALSE)
-
+  
+  is_in_bounds <- function(contry_coord, bounds) {
+    country_lat <- contry_coord[[1]]
+    country_long <- contry_coord[[2]]  
+    return(country_lat > bounds$south & 
+             country_lat < bounds$north & 
+             country_long < bounds$east & 
+             country_long > bounds$west)
+  }
+  
+  countries_in_bounding_box <- function(geo_data, sel_bounds) {
+    
+    filter_in_bounds <- geo_data@polygons %>%
+      purrr::map( ~ .x@labpt) %>%
+      purrr::map_lgl(is_in_bounds, bounds = sel_bounds)
+    
+    geo_data@data %>%
+      filter(filter_in_bounds) %>%
+      pull(ISO_A3)
+  }
+  
+ # observeEvent(input, {cat("You have chosen:", input[[ns(map_bounds)]])})
+  
+  selected_countries <- reactive({
+    cat(file=stderr(), "drawing histogram with", input$map_bounds, "bins", "\n")
+    if (is.null(input$coloredmap_bounds) || is.na(input$coloredmap_bounds)){
+      "all"
+    } else {
+      sel_bounds <- input$coloredmap_bounds
+      print(sel_bounds)
+      countries_in_bounding_box(countries_geo, sel_bounds)
+    }
+  })
+  
+  
+  
   ### choropleth ####
 
   output$coloredmap <- renderLeaflet({
@@ -111,25 +146,43 @@ shinyServer(function(input, output) {
   })
 
   output$time <- renderPlot({
-    out_region <- owundata_input %>%
-      filter(region != "Sub-Saharan Africa")
-    in_region <- owundata_input %>%
-      filter(region == "Sub-Saharan Africa")
-
-    ggplot() +
-      geom_line(
-        data = out_region, aes(year, value, group = country_code),
-        colour = alpha("grey", 0.65)
-      ) +
-      geom_line(data = in_region, aes(
-        x = year,
-        y = value,
-        group = country_code,
-        color = region
-      )) +
-      facet_wrap(~measure) +
-      scale_x_discrete(breaks = c(1975, 1990, 2005, 2016)) +
-      ylab("Percent of adults (%)")
+    
+    if (selected_countries() == "all") {
+      ggplot() +
+        geom_line(data = owundata_input, aes(
+          x = year,
+          y = value,
+          group = country_code,
+          color = region
+        )) +
+        facet_wrap(~measure) +
+        scale_y_continuous(limits = c(0, 0.8)) +
+        scale_x_discrete(breaks = c(1975, 1990, 2005, 2016)) +
+        ylab("Percent of adults (%)")
+      
+    } else {
+      out_region <- owundata_input %>%
+        filter(!country_code %in% selected_countries())
+      in_region <- owundata_input %>%
+        filter(country_code %in% selected_countries())  
+      
+      ggplot() +
+        geom_line(
+          data = out_region, aes(year, value, group = country_code),
+          colour = alpha("grey", 0.65)
+        ) +
+        geom_line(data = in_region, aes(
+          x = year,
+          y = value,
+          group = country_code,
+          color = region
+        )) +
+        facet_wrap(~measure) +
+        scale_y_continuous(limits = c(0, 0.8)) +
+        scale_x_discrete(breaks = c(1975, 1990, 2005, 2016)) +
+        ylab("Percent of adults (%)")
+      
+    }
   })
 
   ### UMAP embedding ####
