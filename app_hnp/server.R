@@ -12,6 +12,26 @@ library(geojsonio)
 library(htmltools)
 library(gghighlight)
 
+is_in_bounds <- function(contry_coord, bounds) {
+  country_lat <- contry_coord[[1]]
+  country_long <- contry_coord[[2]]  
+  return(country_lat > bounds$south & 
+           country_lat < bounds$north & 
+           country_long < bounds$east & 
+           country_long > bounds$west)
+}
+
+countries_in_bounding_box <- function(geo_data, sel_bounds) {
+  
+  filter_in_bounds <- geo_data@polygons %>%
+    purrr::map( ~ .x@labpt) %>%
+    purrr::map_lgl(is_in_bounds, bounds = sel_bounds)
+  
+  geo_data@data %>%
+    filter(filter_in_bounds) %>%
+    pull(ISO_A3)
+}
+
 # Define server logic
 shinyServer(function(input, output) {
 
@@ -40,26 +60,6 @@ shinyServer(function(input, output) {
     pull(series_code)
 
   binpal <- colorBin("Reds", domain = c(0, 18), 9, pretty = FALSE)
-  
-  is_in_bounds <- function(contry_coord, bounds) {
-    country_lat <- contry_coord[[1]]
-    country_long <- contry_coord[[2]]  
-    return(country_lat > bounds$south & 
-             country_lat < bounds$north & 
-             country_long < bounds$east & 
-             country_long > bounds$west)
-  }
-  
-  countries_in_bounding_box <- function(geo_data, sel_bounds) {
-    
-    filter_in_bounds <- geo_data@polygons %>%
-      purrr::map( ~ .x@labpt) %>%
-      purrr::map_lgl(is_in_bounds, bounds = sel_bounds)
-    
-    geo_data@data %>%
-      filter(filter_in_bounds) %>%
-      pull(ISO_A3)
-  }
   
  # observeEvent(input, {cat("You have chosen:", input[[ns(map_bounds)]])})
   
