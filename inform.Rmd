@@ -1,17 +1,21 @@
 ---
-title: "Health Nutrition and Population Statistics report"
-author: "Violeta Roizman"
-date: "23 de diciembre de 2018"
-output: pdf_document
+title: "Gender equality progress around the world"
+author: "Violeta Roizman @L2S-CentraleSupélec and @IC-FCEN-UBA"
+date: "Febrary 2019"
+output:
+  html_document:
+    df_print: paged
+subtitle: UseR!2019 Datathon submission
 ---
 
 ```{r setup, include=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 # data science workflow
-library(tidyverse)
+#as the dataset is not really big I will use readr and dplyr instead of data.table
+library(tidyverse) 
 library(ggthemes) # ggplot2
-library(here)
+library(here) # relative paths
 
 # maps
 library(ggmap)
@@ -25,15 +29,15 @@ library(leaflet)
 library(umap)
 ```
 
-This is the result of an analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. A Shiny App showing all the interesting visualizations can be accessed here. 
+This document presents the results of the analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file with the code which is also available. A Shiny App showing the discussed topic and other interesting visualizations can be accessed here. 
 
-I focused the analysis on the male/female.
+The idea is to analyse the progress towards the resolution of some health issues focusing in gender differences. I will show how some female/male rates have improved and . I will study correlations with education in some cases.
 
 ## Importing and tidying the data
 
-Of course first of all we import the data, we do this with the `readr` package.
+First of all I had to import the data, I did this with the `readr` package.
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, include = FALSE, message= FALSE}
 countries_hnp <- read_csv(here::here("data", "HNP_StatsCountry.csv"))
 
 dataset_hnp <- read_csv(here::here("data", "HNP_StatsData.csv")) %>%
@@ -42,10 +46,11 @@ dataset_hnp <- read_csv(here::here("data", "HNP_StatsData.csv")) %>%
 indicators_hnp <- read_csv(here::here("data", "HNP_StatsSeries.csv"))
 ```
 
+We tidy the data with `dplyr`, `stringr` and `tidyr` from the `tidyverse` and I selected the columns of interest for this analysis. 
 
-We tidy the data with `dplyr`, `stringr` and `tidyr` from the `tidyverse`. We select the columns we care about.
+**Decision:** I chose to use the `tidyverse` environment instead of the `data.table` package because the computational needs were not too high and code is more readable with `dplyr`. 
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, include=FALSE, message= FALSE}
 # select relevant variables and rename variables
 
 # INDICATORS
@@ -57,14 +62,14 @@ colnames(indicators_hnp_keep) <- colnames(indicators_hnp_keep) %>%
   str_to_lower() %>%
   str_replace(" ", "_")
 
-# extract to have more general clasification
+# extract first part of the topic to have more general clasification
 split_topic <- str_split(indicators_hnp_keep$topic, pattern = ":")
 
 indicators_hnp_keep <- indicators_hnp_keep %>%
   mutate(gen_topic = map_chr(split_topic, 
-                             ~.x[1]),
+                             ~.x[1]), # general topic
          part_topic = map_chr(split_topic, 
-                             ~.x[2]))
+                             ~.x[2])) # pqrticular topic
 
 # COUNTRIES
 countries_hnp_keep <- countries_hnp %>%
@@ -84,7 +89,7 @@ colnames(dataset_hnp)[1:4] <- colnames(dataset_hnp)[1:4] %>%
 count_indicator_by_topic <- dataset_hnp %>% 
   left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
   select(-topic, -indicator_name.x, -indicator_name.y, -long_definition) %>%
-  filter(country_name=="Arab World") %>%
+  filter(country_name=="Arab World") %>% # keep a random "country" to avoid repetition
   count(gen_topic, sort = TRUE)
 # HEALTH and EDUCATION most common
 
@@ -97,11 +102,11 @@ countries <- dataset_hnp %>%
                 # by region, by income, etc
 
 # also in countries dataset
+
 # I filter countries with no currency unit: aggregations
 not_countries <- countries_hnp_keep %>% 
   filter(is.na(currency_unit)) %>%
   pull(table_name)
-
 #length(not_countries) # 41
 
 real_countries <- countries_hnp_keep %>% 
@@ -118,22 +123,33 @@ dataset_hnp_education = dataset_hnp %>%
   filter(gen_topic=="Education") %>%
   filter(country_name %in% real_countries) %>%
   gather(key = year, value = indicator_value, `1960`:`2017`) %>%
-  spread(key = indicator_code, value = indicator_value)
+  spread(key = indicator_code, value = indicator_value) %>%
+  left_join(countries_hnp_keep, by = c("country_code"= "country_code")) 
+
+dataset_hnp_others = dataset_hnp %>% 
+  left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
+  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition, -part_topic) %>%
+  filter(gen_topic!="Education", gen_topic!="Health") %>%
+  filter(country_name %in% real_countries) %>%
+  select(-gen_topic) %>%
+  gather(key = year, value = indicator_value, `1960`:`2017`) %>%
+  spread(key = indicator_code, value = indicator_value) %>%
+  left_join(countries_hnp_keep, by = c("country_code"= "country_code")) 
 
 ############################
 # test to check the reshape: 
-
-dataset_hnp %>%
-  filter(country_name=="Afghanistan", indicator_code=="SE.ADT.LITR.FE.ZS") %>%
-  select(`1984`)
-
-dataset_hnp_education %>%
-  filter(country_name=="Afghanistan", year=="1984") %>%
-  select(SE.ADT.LITR.FE.ZS)
+#
+# dataset_hnp %>%
+#   filter(country_name=="Afghanistan", indicator_code=="SE.ADT.LITR.FE.ZS") %>%
+#   select(`1984`)
+# 
+# dataset_hnp_education %>%
+#   filter(country_name=="Afghanistan", year=="1984") %>%
+#   select(SE.ADT.LITR.FE.ZS)
 ############################
 
 dataset_hnp_health = dataset_hnp %>% 
-  left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
+  left_join(indicators_hnp_keep, by = c("indicator_code"="series_code")) %>%
   select(-topic, -indicator_name.x, -indicator_name.y, -long_definition, -part_topic) %>%
   filter(gen_topic=="Health") %>% 
   filter(country_name %in% real_countries) %>%
@@ -142,6 +158,7 @@ dataset_hnp_health = dataset_hnp %>%
   left_join(countries_hnp_keep, by = c("country_code"= "country_code")) 
 
 # Save the tidy datasets
+# here I should use feather to be faster, because of the shiny app
 write_csv(dataset_hnp_health, 
           here::here("data", "dataset_hnp_health_exp.csv"))
 write_csv(dataset_hnp_education, 
@@ -150,17 +167,16 @@ write_csv(indicators_hnp_keep,
           here::here("data", "indicators_hnp_exp.csv"))
 write_csv(countries_hnp_keep,
           here::here("data", "countries_hnp_exp.csv"))
-
 ```
 
-```{r}
+```{r, include=FALSE, message=FALSE}
 dataseth_hnp_health <- read_csv(here::here("data", "dataset_hnp_health_exp.csv"))
   
 indicators_hnp_keep <- read_csv(here::here("data", "indicators_hnp_exp.csv"))
 ```
 
 ## Example HIV
-```{r, echo=FALSE}
+```{r, echo=FALSE, eval =FALSE}
 indicators_hnp_keep %>%
   filter(series_code=="SH.DYN.AIDS") %>%
   pull(long_definition)
@@ -184,8 +200,6 @@ dataset_hnp_health %>%
   ylab("Number of people") +
   ggtitle("Evolution of the number of people infected with HIV in Nigeria")
 
-
-     
 aids_countries <- dataset_hnp_health %>% 
   select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>% 
   filter(year == 2000) %>%
@@ -200,39 +214,38 @@ map_world <- map_data("world") %>%
 mapis = maps::map("world", fill=TRUE, plot=FALSE)
 
 # pdf(here::here("figures/mapa11.pdf"), height = 8, width = 18)
-cloro <- aids_countries %>%
-  inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
-  right_join(world, by = c(mapname = "region")) %>%
-  ggplot(aes(long, lat, group=group, fill= proportion_aids, text=paste0(mapname))) +
-  scale_fill_gradient2(low="blue", high="red", 
-                      midpoint = 0.1, , limits=c(0, 0.18),
-                      labels= scales::percent_format()) +
-  geom_polygon() +
-  theme_map() +
-  coord_cartesian(ylim = c(-50, 90)) 
-
-cloro %>%
-  ggplotly(tooltip = "text") %>%
-  style(hoverlabel = list(bgcolor = "white"), hoveron = "fill")
+# cloro <- aids_countries %>%
+#   inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
+#   right_join(mapis, by = c(mapname = "region")) %>%
+#   ggplot(aes(long, lat, group=group, fill= proportion_aids, text=paste0(mapname))) +
+#   scale_fill_gradient2(low="blue", high="red", 
+#                       midpoint = 0.1, , limits=c(0, 0.18),
+#                       labels= scales::percent_format()) +
+#   geom_polygon() +
+#   theme_map() +
+#   coord_cartesian(ylim = c(-50, 90)) 
+# 
+# cloro %>%
+#   ggplotly(tooltip = "text") %>%
+#   style(hoverlabel = list(bgcolor = "white"), hoveron = "fill")
 # dev.off()
 
 mapa_leafe <- aids_countries %>%
   inner_join(maps::iso3166, by = c("country_code" = "a3")) %>%
-  right_join(world, by = c(mapname = "region"))
+  right_join(map_world, by = c(mapname = "region"))
 
 verdes <- colorNumeric("Reds", domain = c(0,18), na.color = "#808080", alpha = FALSE,
   reverse = FALSE)
 
-binpal <- colorBin("Reds", countries_geo$proportion_aids, 9, pretty = FALSE)
-
-class(mapis)
 
 countries_geo <- geojsonio::geojson_read(here::here("app_hnp","www", "countries.geojson"), what = "sp")
+
+binpal <- colorBin("Reds", countries_geo$proportion_aids, 9, pretty = FALSE)
 
 countries_simple <- rmapshaper::ms_simplify(countries_geo, keep = 0.05, keep_shapes = TRUE)
 saveRDS(countries_simple, file = "app_hnp/data/countries_simple.rds")
 
-sd <- SharedData$new(countries_simple)
+#sd <- SharedData$new(countries_simple)
 
 countries_geo@data <- countries_geo@data %>%
   left_join(aids_countries, by= c("ISO_A3"="country_code")) %>%
@@ -263,6 +276,72 @@ leaflet(data = countries_geo) %>%
 
 
 ```
+
+```{r}
+indicators_hnp_keep %>%
+  filter(series_code=="SE.ADT.LITR.MA.ZS") %>%
+  pull(long_definition)
+# Adult literacy rate is the percentage of people ages 15 
+# and above who can both read and write with understanding 
+# a short simple statement about their everyday life.
+
+dataset_hnp_education %>% 
+  select(country_name, year, SE.ADT.LITR.FE.ZS) %>%
+  group_by(country_name) %>%
+  summarize(avg_lit_fe=mean(SE.ADT.LITR.FE.ZS, na.rm=TRUE)) %>%
+  filter(!is.na(avg_lit_fe)) %>%
+  arrange(avg_lit_fe)
+
+#"SE.ADT.LITR.FE.ZS"    "SE.ADT.LITR.MA.ZS"
+
+# "SE.ADT.1524.LT.FM.ZS" "SE.ADT.1524.LT.MA.ZS" "SE.ADT.1524.LT.ZS"   
+# "SE.ADT.LITR.FE.ZS"    "SE.ADT.LITR.MA.ZS"    "SE.ADT.LITR.ZS"  
+
+dataset_hnp_education %>%
+  select(country_name, year, region, SE.SEC.NENR.FE) %>%
+  mutate(year = as.integer(year)) %>%
+  filter(year > 2000, year<=2016) %>%
+  group_by(region, year) %>%
+  summarize(variable = mean(SE.SEC.NENR.FE, na.rm=TRUE)) %>%
+  ggplot(aes(x=year, y=variable)) +
+  geom_line(aes(color=region, group=region)) +
+  ylab("% of female population") +
+  ggtitle("Evolution of the percent of secondary education female enrollment.")
+
+dataset_hnp_education %>%
+  select(country_name, year, region, SE.SEC.NENR.MA) %>%
+  mutate(year = as.integer(year)) %>%
+  filter(year > 2000, year<=2016) %>%
+  group_by(region, year) %>%
+  summarize(variable = mean(SE.SEC.NENR.MA, na.rm=TRUE)) %>%
+  ggplot(aes(x=year, y=variable)) +
+  geom_line(aes(color=region, group=region)) +
+  ylab("% of male population") +
+  ggtitle("Evolution of the percent of secondary education male enrollment.")
+
+# dataset_hnp_education$SE.PRM.ENRR.FE
+# dataset_hnp_others %>%
+#   select(country_name, year, region, SL.UEM.TOTL.FE.ZS) %>%
+#   mutate(year = as.integer(year)) %>%
+#   filter(year > 2000, year<=2016) %>%
+#   group_by(region, year) %>%
+#   summarize(variable = mean(SL.UEM.TOTL.FE.ZS, na.rm=TRUE)) %>%
+#   ggplot(aes(x=year, y=variable)) +
+#   geom_line(aes(color=region, group=region)) +
+#   ylab("% of female population") +
+#   ggtitle("Evolution of the percent of literacy famale.")
+
+# dataset_hnp_education %>%
+#   mutate(year = as.integer(year)) %>%
+#   filter(year > 2004, year<=2016) %>%
+#   vis_miss()
+# 
+# SL.UEM.TOTL.FE.ZS
+# library(naniar)
+# vis_miss(dataset_hnp_others[1:1000, ])
+
+```
+
 
 ```{r, echo=FALSE, eval=FALSE}
 indicators_hnp_keep %>%
@@ -306,8 +385,6 @@ dataset_hnp %>%
   filter(indicator_code=="SP.POP.TOTL",
          country_code=="DMA") %>%
   select(`2000`)
-# 
-
 
 # Literacy
 
@@ -334,9 +411,26 @@ dataset_hnp %>%
   filter(country_name=="Arab World") %>%
   left_join(indicators_hnp_keep, 
             by = c("indicator_code"="series_code")) %>%
-  select(-topic, -indicator_name.y, -long_definition) %>%
-  filter(gen_topic!="Education", gen_topic!="Health") %>%
+  select(-topic, -indicator_name.y) %>%
+  filter(gen_topic!="Education",
+         gen_topic!="Health") %>%
+  filter((str_detect(indicator_name.x, "%") & !str_detect(indicator_name.x, "female") & !str_detect(indicator_name.x, "male") & !str_detect(indicator_name.x, "women")) |
+           (str_detect(indicator_name.x, "HCI") & !str_detect(indicator_name.x, "female") & !str_detect(indicator_name.x, "male")) |
+           str_detect(indicator_name.x, "GNI"))  %>%
   pull(indicator_name.x)
+
+dataset_hnp %>% 
+  filter(country_name=="Nigeria") %>%
+  left_join(indicators_hnp_keep, 
+            by = c("indicator_code"="series_code")) %>%
+  select(-topic, -indicator_name.y) %>%
+  filter(gen_topic=="Health") %>%
+  filter(str_detect(indicator_name.x, "women") | str_detect(indicator_name.x, "female") | str_detect(indicator_name.x, "woman")) %>%
+  pull(indicator_code)
+
+indicators_hnp_keep$long_definition
+
+"SH.HIV.KNOW.FE.ZS"
 
 # HEALTH:
 
@@ -418,14 +512,18 @@ dataset_hnp %>%
 ```
 
 
-# UMAP embedding
+# Countries embeddings
 
-With the `umap` package we embed the dataset with health features to 2D to visualize the neighborhoods.
+UMAP is a new (2018) embedding algorithm that has a similar scheme to t-SNE, the well-known state of the art non-linear embedding algorithm. Their objective is to visualize high-dimensional datasets in 2D or 3D preserving neighborhoods in terms of distances.  
 
+I embedded to 2D the dataset having into account different subsets of features. I based my feature subsets in health and nutritional, educational, economical and gender aspects. Like that I could visualize how countries group with regard to the different aspect and check if the resulting clusterings change and how they are related to the geographical location.
+
+
+### Health aspect
 ```{r, echo=FALSE}
 # UMAP embedding for a year, health
 
-an_year <- 1995
+an_year <- 2015
 
 #indicators_hnp_keep %>%
 #  filter(gen_topic == "Health") %>%
@@ -466,43 +564,190 @@ data_umap_health %>%
 #dev.off()
 ```
 
-### Obesity
+### Educational aspect
+```{r, echo=FALSE}
+# UMAP embedding for a year, health
 
-```{r}
-SH.STA.OWAD.ZS
+an_year <- 2015
 
-obesity <- dataset_hnp_health %>% 
-  select(country_code, year, SH.STA.OWAD.ZS) %>% 
-  rename(proportion_obesity = SH.STA.OWAD.ZS) %>%
-  filter(!is.na(proportion_obesity)) %>%
-  left_join(countries_hnp_keep, by = c("country_code"= "country_code")) %>%
-  select(country_code, year, proportion_obesity, region)
+#indicators_hnp_keep %>%
+#  filter(gen_topic == "Health") %>%
+#  pull(part_topic) %>%
+#  unique()
+
+# I keep comparable indicators (%)
+comparable_ed_indicators <- indicators_hnp_keep %>%
+  filter(str_detect(indicator_name, "%"),
+         gen_topic == "Education") %>%
+  pull(series_code)
+
+dataset_comparable_ed <- dataset_hnp_education %>%
+  filter(year == an_year) %>%
+  select(country_name, country_code, one_of(comparable_ed_indicators))  %>%
+  select_if(function(x) (sum(is.na(x)) <= (0.3 * length(x))) || is.character(x)) %>%
+  drop_na()
   
-ggplot(obesity) + 
-  geom_line(aes(x = year, 
-                y = proportion_obesity, 
-                group = country_code, 
-                color=region)) +
-  scale_x_discrete(breaks=c(1975,1990,2005, 2016)) +
-  ylab("overweight in adults (%)") +
-  theme_bw()
+data_to_umap <- as.matrix(dataset_comparable_ed[, 3:ncol(dataset_comparable_ed)])
+data_ed_umap <- umap(data_to_umap)
 
-oudata <- dataset_hnp_health %>% 
-  select(country_code, year, SH.STA.OWAD.ZS, SN.ITK.DEFC, SP.POP.TOTL) %>% 
-  mutate(overweighted = SH.STA.OWAD.ZS/100, 
-         undernourished = SN.ITK.DEFC/SP.POP.TOTL) %>%
-  filter(!is.na(overweighted),
-         !is.na(undernourished),
-         country_code!="KIR", # BUG/OUTLIER
-         country_code!="DMA",
-         country_code!="VCT") %>%
-  left_join(countries_hnp_keep, by = c("country_code"= "country_code")) %>%
-  select(country_code, year, overweighted, undernourished, region) %>%
-  gather(key="measure",
-         value="value",
-         c("overweighted", "undernourished"))
+data_umap_ed <- tibble(x = data_ed_umap$layout[, 1], 
+                           y = data_ed_umap$layout[, 2],
+                           country = dataset_comparable_ed$country_code)
 
-saveRDS(oudata, here::here("data", "overweigh_undernourish.rds"))
+# esto se puede optimizar poniendolo desde el principio en dataset
+data_umap_ed <- data_umap_ed %>%
+  left_join(countries_hnp_keep, by = c("country"= "country_code")) %>%
+  select(x, y, country, region)
+
+#pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
+data_umap_ed %>% 
+  ggplot(aes(x, y, color= region, label = country)) +
+  geom_point() +
+  geom_text(aes(label=country),hjust=0, vjust=0) +
+  theme_void()
+#dev.off()
+```
+
+### Economical aspect
+```{r, echo=FALSE}
+# UMAP embedding for a year, health
+
+an_year <- 2015
+
+#indicators_hnp_keep %>%
+#  filter(gen_topic == "Health") %>%
+#  pull(part_topic) %>%
+#  unique()
+
+# I keep comparable indicators (%)
+comparable_oth_indicators <- indicators_hnp_keep %>%
+  filter((str_detect(indicator_name, "%") & !str_detect(indicator_name, "female") & !str_detect(indicator_name, "male") & !str_detect(indicator_name, "women")) |
+           (str_detect(indicator_name, "HCI") & !str_detect(indicator_name, "female") & !str_detect(indicator_name, "male")) |
+           str_detect(indicator_name, "GNI"), 
+         gen_topic != "Education",
+         gen_topic != "Health") %>%
+  pull(series_code)
+
+dataset_comparable_oth <- dataset_hnp_others %>%
+  filter(year == an_year) %>%
+  select(country_name, country_code, one_of(comparable_oth_indicators))  %>%
+  select_if(function(x) (sum(is.na(x)) <= (0.3 * length(x))) || is.character(x)) %>%
+  drop_na()
+  
+data_to_umap <- as.matrix(dataset_comparable_oth[, 3:ncol(dataset_comparable_oth)])
+data_oth_umap <- umap(data_to_umap)
+
+data_umap_oth <- tibble(x = data_oth_umap$layout[, 1], 
+                           y = data_oth_umap$layout[, 2],
+                           country = dataset_comparable_oth$country_code)
+
+# esto se puede optimizar poniendolo desde el principio en dataset
+data_umap_oth <- data_umap_oth %>%
+  left_join(countries_hnp_keep, by = c("country"= "country_code")) %>%
+  select(x, y, country, region)
+
+#pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
+data_umap_oth %>% 
+  ggplot(aes(x, y, color= region, label = country)) +
+  geom_point() +
+  geom_text(aes(label=country),hjust=0, vjust=0) +
+  theme_void()
+#dev.off()
+
+
+```
+
+### Gender aspect
+```{r, echo=FALSE}
+# UMAP embedding for a year, health
+
+an_year <- 2015
+
+#indicators_hnp_keep %>%
+#  filter(gen_topic == "Health") %>%
+#  pull(part_topic) %>%
+#  unique()
+
+# I keep comparable indicators (%)
+comparable_gender_indicators <- indicators_hnp_keep %>%
+  filter(((str_detect(indicator_name, "%") | str_detect(indicator_name, "rate"))  & (str_detect(indicator_name, "female") | str_detect(indicator_name, "women")))) %>%
+  pull(series_code)
+
+dataset_hnp_gender = dataset_hnp %>% 
+  left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
+  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition, -part_topic, -gen_topic) %>%
+  filter(country_name %in% real_countries) %>%
+  filter(indicator_code %in% comparable_gender_indicators) %>%
+  gather(key = year, value = indicator_value, `1960`:`2017`) %>%
+  spread(key = indicator_code, value = indicator_value) %>%
+  left_join(countries_hnp_keep, by = c("country_code"= "country_code")) 
+
+dataset_comparable_gender <- dataset_hnp_gender %>%
+  filter(year == an_year) %>%
+  select(country_name, country_code, one_of(comparable_gender_indicators))  %>%
+  select_if(function(x) (sum(is.na(x)) <= (0.3 * length(x))) || is.character(x)) %>%
+  drop_na()
+  
+data_to_umap <- as.matrix(dataset_comparable_gender[, 3:ncol(dataset_comparable_gender)])
+data_gender_umap <- umap(data_to_umap)
+
+data_umap_gender <- tibble(x = data_gender_umap$layout[, 1], 
+                           y = data_gender_umap$layout[, 2],
+                           country = dataset_comparable_gender$country_code)
+
+# esto se puede optimizar poniendolo desde el principio en dataset
+data_umap_gender <- data_umap_gender %>%
+  left_join(countries_hnp_keep, by = c("country"= "country_code")) %>%
+  select(x, y, country, region)
+
+#pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
+data_umap_gender %>% 
+  ggplot(aes(x, y, color= region, label = country)) +
+  geom_point() +
+  geom_text(aes(label=country),hjust=0, vjust=0) +
+  theme_void()
+#dev.off()
+
+
+```
+
+**Decisions and considerations:**  I chose to use UMAP instead of t-SNE because it has two advantages: it is much faster and the algorithm steps are justified (with topological theory). In particular I chose to use `umap` package. In order to have commesurable datasets I selected only relative features like for example the ones expressed in percent and the rates.
+
+```{r, include=FALSE}
+#SH.STA.OWAD.ZS
+
+# obesity <- dataset_hnp_health %>% 
+#   select(country_code, year, SH.STA.OWAD.ZS) %>% 
+#   rename(proportion_obesity = SH.STA.OWAD.ZS) %>%
+#   filter(!is.na(proportion_obesity)) %>%
+#   left_join(countries_hnp_keep, by = c("country_code"= "country_code")) %>%
+#   select(country_code, year, proportion_obesity, region)
+#   
+# ggplot(obesity) + 
+#   geom_line(aes(x = year, 
+#                 y = proportion_obesity, 
+#                 group = country_code, 
+#                 color=region)) +
+#   scale_x_discrete(breaks=c(1975,1990,2005, 2016)) +
+#   ylab("overweight in adults (%)") +
+#   theme_bw()
+
+# oudata <- dataset_hnp_health %>% 
+#   select(country_code, year, SH.STA.OWAD.ZS, SN.ITK.DEFC, SP.POP.TOTL) %>% 
+#   mutate(overweighted = SH.STA.OWAD.ZS/100, 
+#          undernourished = SN.ITK.DEFC/SP.POP.TOTL) %>%
+#   filter(!is.na(overweighted),
+#          !is.na(undernourished),
+#          country_code!="KIR", # BUG/OUTLIER
+#          country_code!="DMA",
+#          country_code!="VCT") %>%
+#   left_join(countries_hnp_keep, by = c("country_code"= "country_code")) %>%
+#   select(country_code, year, overweighted, undernourished, region) %>%
+#   gather(key="measure",
+#          value="value",
+#          c("overweighted", "undernourished"))
+# 
+# saveRDS(oudata, here::here("data", "overweigh_undernourish.rds"))
   
 ```
 

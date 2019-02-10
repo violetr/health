@@ -15,7 +15,7 @@ shinyUI(
     dashboardSidebar(size = "thin", sidebarMenu(
       menuItem(tabName = "home", text = "Home", icon = icon("home")),
       menuItem(tabName = "map", text = "Map", icon = icon("map")),
-      menuItem(tabName = "umap", text = "Countries Clustering", icon = icon("spinner")),
+      menuItem(tabName = "umap", text = "Countries Embedding", icon = icon("spinner")),
       menuItem(tabName = "other", text = "Time Statistics", icon = icon("chart line")),
       menuItem(tabName = "yother", text = "Gender Comparison", icon = icon("venus mars"))
     )),
