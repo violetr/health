@@ -29,13 +29,13 @@ library(leaflet)
 library(umap)
 ```
 
-This document presents the results of the analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file with the code which is also available. A Shiny App showing the discussed topic and other interesting visualizations can be accessed here. 
+Here I present my analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file which is also available. A Shiny App showing the discussed topic and other visualizations can be accessed here. All the used code is available in my github @violetr. 
 
-The idea is to analyse the progress towards the resolution of some health issues focusing in gender differences. I will show how some female/male rates have improved and . I will study correlations with education in some cases.
+My idea is to analyze the progress towards the resolution of some health issues focusing in gender differences. I will show how some female/male rates have improved and . I will study correlations with education in some cases.
 
 ## Importing and tidying the data
 
-First of all I had to import the data, I did this with the `readr` package.
+First of all I had to import the data, I did this with the `readr` package. I chose to use the `tidyverse` environment instead of the `data.table` package because the computational needs were not too high and code is more readable with `dplyr`. I chose to use `readr` instead of `read.csv` from R `base` beacause it is faster. 
 
 ```{r, echo=FALSE, warning=FALSE, include = FALSE, message= FALSE}
 countries_hnp <- read_csv(here::here("data", "HNP_StatsCountry.csv"))
@@ -48,7 +48,6 @@ indicators_hnp <- read_csv(here::here("data", "HNP_StatsSeries.csv"))
 
 We tidy the data with `dplyr`, `stringr` and `tidyr` from the `tidyverse` and I selected the columns of interest for this analysis. 
 
-**Decision:** I chose to use the `tidyverse` environment instead of the `data.table` package because the computational needs were not too high and code is more readable with `dplyr`. 
 
 ```{r, echo=FALSE, warning=FALSE, include=FALSE, message= FALSE}
 # select relevant variables and rename variables
@@ -521,6 +520,10 @@ I embedded to 2D the dataset having into account different subsets of features. 
 
 ### Health aspect
 ```{r, echo=FALSE}
+custom.config = umap.defaults
+custom.config$random_state = 123
+custom.config$min_dist = 0.11
+
 # UMAP embedding for a year, health
 
 an_year <- 2015
@@ -532,7 +535,7 @@ an_year <- 2015
 
 # I keep comparable indicators (%)
 comparable_health_indicators <- indicators_hnp_keep %>%
-  filter(str_detect(indicator_name, "%"),
+  filter(str_detect(indicator_name, "%") & !str_detect(indicator_name, "female") & !str_detect(indicator_name, "male") & !str_detect(indicator_name, "women"),
          gen_topic == "Health",
          ! part_topic %in% " Population") %>%
   pull(series_code)
@@ -544,9 +547,9 @@ dataset_comparable_health <- dataset_hnp_health %>%
   drop_na()
   
 data_to_umap <- as.matrix(dataset_comparable_health[, 3:ncol(dataset_comparable_health)])
-data_health_umap <- umap(data_to_umap)
+data_health_umap <- umap(data_to_umap, config = custom.config)
 
-data_umap_health <- tibble(x = data_health_umap$layout[, 1], 
+data_umap_health <- tibble(x = data_health_umap$layout[, 1],
                            y = data_health_umap$layout[, 2],
                            country = dataset_comparable_health$country_code)
 
@@ -577,7 +580,7 @@ an_year <- 2015
 
 # I keep comparable indicators (%)
 comparable_ed_indicators <- indicators_hnp_keep %>%
-  filter(str_detect(indicator_name, "%"),
+  filter((str_detect(indicator_name, "%") & !str_detect(indicator_name, "female") & !str_detect(indicator_name, "male") & !str_detect(indicator_name, "women")),
          gen_topic == "Education") %>%
   pull(series_code)
 
