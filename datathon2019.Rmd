@@ -1,5 +1,5 @@
 ---
-title: "Progress towards HIV control in the last 20 years"
+title: "Is HIV under control?"
 author: "Violeta Roizman  @L2S-CentraleSupélec and @IC-FCEN-UBA"
 date: "Febrary 2019"
 output:
@@ -61,7 +61,7 @@ Acquired immune deficiency syndrome (AIDS) is a spectrum of conditions caused by
 
 First of all I had to import the data, I did this with the `readr` package. I chose to use the `tidyverse` environment instead of the `data.table` package because the computational needs were not too big and code is more readable with `dplyr`.
 
-```{r read, eval=FALSE, echo=FALSE, warning=FALSE, include = FALSE, message= FALSE}
+```{r read, eval=FALSE,  warning=FALSE,  message= FALSE}
 countries_hnp <- read_csv(here::here("data", "HNP_StatsCountry.csv"))
 
 dataset_hnp <- read_csv(here::here("data", "HNP_StatsData.csv")) %>%
@@ -338,7 +338,7 @@ aids_countries <- dataset_hnp_health %>%
 
 # saveRDS(countries_simple, file = "app_hnp/data/countries_simple.rds")
 # I load the simplified version to be faster
-countries_geo <- readRDS(here::here("app_hnp", "data", "countries_simple.rds"))
+countries_geo <- readRDS(here::here("app_hnp",  "countries_simple.rds"))
 
 # join with aids
 countries_geo@data <- countries_geo@data %>%
@@ -495,7 +495,7 @@ paleta <- rainbow_hcl(8, c = 35, l = 85)
 
 factpal <- colorFactor(paleta, clt_to_map$cstr)
 
-countries_geo <- readRDS(here::here("app_hnp", "data", "countries_simple.rds"))
+countries_geo <- readRDS(here::here("app_hnp",  "countries_simple.rds"))
 
 countries_geo@data <- countries_geo@data %>%
   left_join(clt_to_map, by = c("ISO_A3" = "country")) %>%
@@ -571,7 +571,7 @@ clt_to_map <- data_umap_health %>%
 
 factpal <- colorFactor(paleta, clt_to_map$cstr)
 
-countries_geo <- readRDS(here::here("app_hnp", "data", "countries_simple.rds"))
+countries_geo <- readRDS(here::here("app_hnp", "countries_simple.rds"))
 
 countries_geo@data <- countries_geo@data %>%
   left_join(clt_to_map, by = c("ISO_A3" = "country")) %>%
@@ -611,7 +611,7 @@ The shiny app can be used to explore how these plots change for different years.
 
 ## Treatment, education and safe practices
 
-The objective of this section is to monitor indicators that are directly related to the prevalence of HIV virus as the coverage of treatment, the knowledge about the virus and the safe practices that act as prevent methods. Idealy we could validate the prevalence and incidence indicators with the evolution of these other indicators.
+The objective of this section is to monitor indicators that are directly related to the prevalence of HIV virus as the coverage of treatment: knowledge about the virus and the safe practices that act as prevent methods. Ideally we could validate the prevalence and incidence indicators with the evolution of these other indicators.
 
 ### ART treatment
 
@@ -825,9 +825,9 @@ We can appreciate an increasement in the percent for both available gender infor
 
 ## Conclusions
 
-With all the analysis of this document we studied in general the prevalence of HIV in the world. We found that the number of new infections has been decreasing and also the number of AIDS-related deaths did more recently. We realized that the most affected area is the South of Africa and realized that the north of Africa has one of the lowest prevalence of the virus of the world. 
+In this document we studied in general the prevalence of HIV in the world. We found that the number of new infections has been decreasing in the last 20 years. Also, the number of AIDS-related deaths did decrease since 2004. We realized that the most affected area is the South of Africa and realized that the north of Africa has one of the lowest prevalence of the virus of the world. 
 
-Regarding treatment all plots show that the coverage of ART has been improved in general. We couldn't say much about the evolution of the knowledge about HIV because of the big proportion of missing data, but it seems to be increasing. Finally, we had good news about safe practices: the use of condom has been increasing during the studied period. The behaviour of these features over the time is compatible with the prevalence evolution and it validates the strong correlation that they are supposed to present.
+Regarding treatment all plots show that the coverage of ART has been improved in general. We couldn't say much about the evolution of the knowledge about HIV because of the big proportion of missing data, but it seems to be increasing. Finally, we had good news about safe practices: the use of condom has been increasing during the studied period. The behavior of these features over the time is compatible with the prevalence evolution and it validates the strong correlation that they are supposed to present.
 
 ## Sources
 
