@@ -45,7 +45,7 @@ library(dbscan)
 my_palette <- rainbow_hcl(8)
 ```
 
-In this document I present my analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file `datathon2019.Rmd`. A Shiny App showing the discussed topic and other visualizations can be accessed here: violetr.shinyapps.io/hiv_hnp/. It's a complementary material but it doesn't replace this report. All the code that I used to build both the document and the application is available on this repository: github.com/violetr/health. 
+In this document I present my analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file `datathon2019.Rmd`. A Shiny App showing the discussed topic and other visualizations can be accessed here: violetr.shinyapps.io/hiv_hnp/. It's a complementary material but it doesn't replace this report. All the code that I used to build both the document and the application is available in this repository: github.com/violetr/health. 
 
 <center><img src="figures/aids_6.png", width = "20%"></center>
 
@@ -53,13 +53,13 @@ I analyzed the prevalence of HIV, paying special attention to risk areas. The re
 
 ## Introduction
 
-Let's get some information from Wikipedia to enter the topic:
+Let's get some information from Wikipedia about HIV/AIDS:
 
 Acquired immune deficiency syndrome (AIDS) is a spectrum of conditions caused by infection with the human immunodeficiency virus (HIV). As the infection progresses, it affects more the immune system, increasing the risk of developing infections. Without treatment, average survival time after infection with HIV is estimated to be 9 to 11 years, depending on the virus subtype. HIV is spread primarily by unprotected sex, contaminated blood transfusions, hypodermic needles, and from mother to child during pregnancy, delivery, or breastfeeding. Safe practices include safe sex (using condom), needle exchange programs, treating mothers that are infected, and male circumcision.
 
 ## Importing and tidying the data: considerations
 
-First of all I had to import the data, I did this with the `readr` package. I chose to use the `tidyverse` environment instead of the `data.table` package because the computational needs were not too big and code is more readable with `dplyr`.
+First of all I had to import the data, I did this with the `readr` package. I chose to use the `tidyverse` environment instead of the `data.table` package because the computational needs were not too big and code is more readable with `dplyr`. Like that, don't need to comment a lot the tidy scripts. 
 
 ```{r read, eval=FALSE,  warning=FALSE,  message= FALSE}
 countries_hnp <- read_csv(here::here("data", "HNP_StatsCountry.csv"))
@@ -70,9 +70,9 @@ dataset_hnp <- read_csv(here::here("data", "HNP_StatsData.csv")) %>%
 indicators_hnp <- read_csv(here::here("data", "HNP_StatsSeries.csv"))
 ```
 
-I manipulated the data with `dplyr` and `tidyr` to select the columns of interest for the analysis and to reshape the data into a tidy format. 
+I manipulated the data with `dplyr` and `tidyr` to select the columns of interest for the analysis and to reshape the data into a tidy format. I show the main part of the manipulation whose most important part is the gather-spread that returns a database where indicators are the columns:
 
-```{r tidy, eval=FALSE, echo=FALSE, warning=FALSE, include=FALSE, message= FALSE}
+```{r , eval=FALSE, echo=FALSE, warning=FALSE, include=FALSE, message= FALSE}
 # select relevant variables and rename variables
 
 # INDICATORS
@@ -105,75 +105,15 @@ colnames(countries_hnp_keep) <- colnames(countries_hnp_keep) %>%
 colnames(dataset_hnp)[1:4] <- colnames(dataset_hnp)[1:4] %>%
   str_to_lower() %>%
   str_replace(" ", "_")
+```
 
-# CHECKING
-# subset by general topic
-count_indicator_by_topic <- dataset_hnp %>%
-  left_join(indicators_hnp_keep, by = c("indicator_code" = "series_code")) %>%
-  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition) %>%
-  filter(country_name == "Arab World") %>% # keep a random "country" to avoid repetition
-  count(gen_topic, sort = TRUE)
-# HEALTH and EDUCATION most common
-
-# checking names
-countries <- dataset_hnp %>%
-  select(country_name) %>%
-  unique()
-
+```{r tidy, eval=FALSE, warning=FALSE, message= FALSE}
 # in dataset we have grouped countries
 # by region, by income, etc
 # also in countries dataset
-
-# I filter countries with no currency unit: aggregations
-not_countries <- countries_hnp_keep %>%
-  filter(is.na(currency_unit)) %>%
-  pull(table_name)
-# length(not_countries) # 41
-
 real_countries <- countries_hnp_keep %>%
-  filter(!is.na(currency_unit)) %>%
+  filter(!is.na(currency_unit)) %>% # I filter them because they have NA currency
   pull(table_name)
-
-# I reshape with gather and spread
-# because it is handful to have indicators as features
-# I also split into 3 different datasets: health, education or others indicators
-dataset_hnp_education <- dataset_hnp %>%
-  left_join(indicators_hnp_keep, by = c("indicator_code" = "series_code")) %>%
-  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition, -part_topic) %>%
-  filter(
-    gen_topic == "Education", 
-    country_name %in% real_countries
-  ) %>%
-  gather(key = year, value = indicator_value, `1960`:`2017`) %>% 
-  spread(key = indicator_code, value = indicator_value) %>% # indicators as col
-  left_join(countries_hnp_keep, by = c("country_code" = "country_code")) %>%
-  mutate(year = as.integer(year))
-
-############################
-# test to check the reshape:
-#
-# dataset_hnp %>%
-#   filter(country_name=="Afghanistan", indicator_code=="SE.ADT.LITR.FE.ZS") %>%
-#   select(`1984`)
-#
-# dataset_hnp_education %>%
-#   filter(country_name=="Afghanistan", year=="1984") %>%
-#   select(SE.ADT.LITR.FE.ZS)
-############################
-
-dataset_hnp_others <- dataset_hnp %>%
-  left_join(indicators_hnp_keep, by = c("indicator_code" = "series_code")) %>%
-  select(-topic, -indicator_name.x, -indicator_name.y, -long_definition, -part_topic) %>%
-  filter(
-    gen_topic != "Education", 
-    gen_topic != "Health", 
-    country_name %in% real_countries
-  ) %>%
-  select(-gen_topic) %>%
-  gather(key = year, value = indicator_value, `1960`:`2017`) %>%
-  spread(key = indicator_code, value = indicator_value) %>% # indicators as col
-  left_join(countries_hnp_keep, by = c("country_code" = "country_code")) %>%
-  mutate(year = as.integer(year))
 
 dataset_hnp_health <- dataset_hnp %>%
   left_join(indicators_hnp_keep, by = c("indicator_code" = "series_code")) %>%
@@ -183,10 +123,12 @@ dataset_hnp_health <- dataset_hnp %>%
     country_name %in% real_countries
   ) %>%
   gather(key = year, value = indicator_value, `1960`:`2017`) %>%
-  spread(key = indicator_code, value = indicator_value) %>% # indicators as col
-  left_join(countries_hnp_keep, by = c("country_code" = "country_code")) %>%
+  spread(key = indicator_code, value = indicator_value) %>% # indicators as columns
+  left_join(countries_hnp_keep, by = c("country_code" = "country_code")) %>% # get the region
   mutate(year = as.integer(year))
+```
 
+```{r , eval=FALSE, echo=FALSE, warning=FALSE, include=FALSE, message= FALSE}
 # Save the tidy datasets
 write_feather(dataset_hnp, here::here("data", "dataset_hnp_exp"))
 write_feather(dataset_hnp_health, here::here("data", "dataset_hnp_health_exp"))
@@ -216,7 +158,7 @@ real_countries <- countries_hnp_keep %>% # real countries are not aggregations
 
 This is a table including all the available indicators that are directly related with the virus and the syndrome:
 
-```{r table indicators, results="asis", echo=FALSE}
+```{r table indicators, results="asis"}
 indicators_hnp_keep %>%
   filter(str_detect(indicator_name, "AIDS") | str_detect(indicator_name, "HIV") |
     str_detect(indicator_name, "Condom")) %>%
@@ -246,10 +188,11 @@ indicators_hnp_keep %>%
 
 Looking at the following plot showing the number of people in the world living with HIV can be really alarming:
 
-```{r people hiv line, echo=FALSE, fig.align="center"}
+```{r, echo=FALSE, fig.align="center"}
 # decimal format: (not scientific)
 point <- format_format(big.mark = "", decimal.mark = ",", scientific = FALSE)
-
+```
+```{r people hiv line, fig.align="center", echo = TRUE}
 dataset_hnp_health %>%
   select(country_name, year, SH.HIV.TOTL) %>%
   filter(year >= 1997) %>%
@@ -258,7 +201,7 @@ dataset_hnp_health %>%
   ungroup() %>%
   mutate(image_aids = "aids2.png") %>% # add image for each point
   ggplot(aes(year, aids)) +
-  geom_image(aes(image = image_aids), size=.05) +
+  geom_image(aes(image = image_aids), size=.05) + # geom from ggimage package
   xlab("Year") +
   ylab("# of people") +
   ggtitle("Number of people in the world infected with HIV") +
@@ -269,7 +212,7 @@ dataset_hnp_health %>%
 Infected population has been continuously growing in the last 20 years. But this other one looks much better:
 
 ```{r deaths and new infections, echo=FALSE}
-dataset_hnp_health %>%
+data_new_inf_deaths <- dataset_hnp_health %>%
   select(country_name, year, SH.HIV.INCD, SH.DYN.AIDS.DH) %>%
   filter(year >= 1997) %>%
   group_by(year) %>%
@@ -278,7 +221,11 @@ dataset_hnp_health %>%
     aids.deaths = sum(SH.DYN.AIDS.DH, na.rm = TRUE)
   ) %>% # number of deaths
   ungroup() %>%
-  select(year, aids.new, aids.deaths) %>%
+  select(year, aids.new, aids.deaths)
+```
+
+```{r , echo=FALSE}
+data_new_inf_deaths %>%
   gather(aids.new, aids.deaths, key = "indicator", value = "value") %>%
   ggplot() +
   geom_line(aes(year, value, color = indicator), size = 0.8) +
@@ -298,7 +245,7 @@ Let's see an analysis by country.
 
 Let's look at the percent of population living with HIV in 2017:
 
-```{r table countries, echo=FALSE}
+```{r table countries, echo=TRUE}
 dataset_hnp_health %>%
   select(country_name, year, SH.HIV.TOTL, SP.POP.TOTL) %>%
   filter(year == 2017) %>% # currently
@@ -307,7 +254,8 @@ dataset_hnp_health %>%
   select(country_name, aids.prop) %>%
   arrange(desc(aids.prop)) %>%
   head(10)
-
+```
+```{r, echo=FALSE}
 by_risk <- dataset_hnp_health %>%
   select(country_name, year, SH.HIV.TOTL, SP.POP.TOTL) %>%
   filter(year == 2017) %>%
@@ -320,7 +268,7 @@ by_risk <- dataset_hnp_health %>%
 high_risk <- by_risk[1:20] # high risk countries
 ```
 
-Africa has been the most affected continent. It's even clearer when we look the following choropleth:
+Africa has been the most affected continent. It's even clearer when we look the following interactive choropleth generated with `leaflet`:
 
 ```{r choropleth hiv, echo = FALSE, warning=FALSE, message=FALSE}
 aids_countries <- dataset_hnp_health %>%
@@ -410,7 +358,7 @@ The Shiny App can be used to explore the choropleth for different HIV indicators
 
 Let's see how countries are grouped depending only on HIV related features. In order to do this I only considered the commensurable features, that is, relative values like percent or rates. Firstly, I embedded the dataset to 2D having into account HIV related features. Like that, I could visualize how countries group and see how clusters are related to the geographical location. I had to impute some missing values with the `missMDA` package prior to the embedding transformation.
 
-UMAP is a new (2018) embedding algorithm that has a similar scheme to t-SNE, the well-known state of the art non-linear embedding algorithm. Their objective is to visualize high-dimensional datasets in 2D or 3D preserving neighborhoods in terms of distances. I decided to use it because it's much faster than t-SNE.
+UMAP is a new (2018) embedding algorithm that has a similar scheme to t-SNE, the well-known state of the art non-linear embedding algorithm. Their objective is to visualize high-dimensional datasets in 2D or 3D preserving neighborhoods in terms of distances. I decided to use it because it's much faster than t-SNE and all algorithm decisions are mathematically justified.
 
 Let's see the resulting embedding for 2015:
 
@@ -449,40 +397,58 @@ data_to_embed <- function(indicators_hnp_keep, dataset_hnp_health, an_year, cust
 ```
 
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
-# UMAP embedding for a year, health
-
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+# UMAP embedding for a year in particular
 an_year <- 2015
 
-res <- data_to_embed(indicators_hnp_keep, dataset_hnp_health, an_year,  custom.config)
+# keep only hiv related and percent or rate
+comparable_health_indicators <- indicators_hnp_keep %>%
+  filter(
+    (str_detect(indicator_name, "%") | str_detect(indicator_name, "rate")) & (str_detect(indicator_name, "AIDS") | str_detect(indicator_name, "HIV") |
+      str_detect(indicator_name, "Condom")), 
+    !part_topic %in% " Population"
+  ) %>%
+  pull(series_code)
 
-data_to_umap <- res$data_to_umap 
+# subset the features already selected  
+dataset_comparable_health <- dataset_hnp_health %>%
+  filter(year == an_year) %>%
+  select(country_name, country_code, region, one_of(comparable_health_indicators)) %>%
+  select_if(function(x) (sum(is.na(x)) <= (0.4 * length(x))) || is.character(x))
+# only keep features that have a "resonable" amount of missing data
 
-dataset_comparable_health <- res$dataset_comparable_health
+# I impute missing data
+res.comp <- imputePCA(as.data.frame(dataset_comparable_health[, 4:ncol(dataset_comparable_health)])) #missMDA
+dataset_comparable_health_com <- res.comp$comp
+  
+data_to_umap <- as.matrix(dataset_comparable_health_com)
 
+#I apply the algorithm from the umap package
 data_health_umap <- umap(data_to_umap, config = custom.config)
+# and after that we plot it
+```
 
+```{r, echo =FALSE}
 data_umap_health <- tibble(
   x = data_health_umap$layout[, 1],
   y = data_health_umap$layout[, 2],
   country = dataset_comparable_health$country_code,
   region = dataset_comparable_health$region
 )
-
-# pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
+```
+```{r, echo =TRUE}
 data_umap_health %>%
   ggplot(aes(x, y, color = region, label = country)) +
   geom_point() +
   geom_text(aes(label = country), hjust = 0, vjust = 0, show.legend = FALSE) +
   theme_void()
-# dev.off()
 ```
 
 We can visualize 6/7 clear groups, two of which are composed only by African countries (pink groups). These two African groups are the most affected countries. All the other clusters have an heterogeneous composition in terms of continents.
 
-Secondly, I clustered the embedded data with the HDBSCAN density-based clustering algorithm from the `dbscan` library. I plotted the resulting clustering encoded with colors in the world map:
+Secondly, I clustered the embedded data with the HDBSCAN density-based clustering algorithm from the `dbscan` library. 
 
-```{r clustering, echo=FALSE, message=FALSE, warning=FALSE}
+```{r clustering, echo=TRUE, message=FALSE, warning=FALSE}
 # cluster countries from embedding representation
 hiv_cl <- hdbscan(data_umap_health[, c(1, 2)], minPts = 6)$cluster
 
@@ -490,7 +456,12 @@ hiv_cl <- hdbscan(data_umap_health[, c(1, 2)], minPts = 6)$cluster
 clt_to_map <- data_umap_health %>%
   select(country) %>%
   mutate(cstr = hiv_cl)
+```
 
+I plotted the resulting clustering encoded with colors in the world map:
+
+
+```{r , echo=FALSE, message=FALSE, warning=FALSE}
 paleta <- rainbow_hcl(8, c = 35, l = 85)
 
 factpal <- colorFactor(paleta, clt_to_map$cstr)
@@ -697,13 +668,15 @@ Of course education, and in particular HIV knowledge is highly related with the 
 
 <br>
 
-"AIDS stigma exists around the world and it prevents many people from seeking HIV testing, returning for their results, or securing treatment, possibly turning what could be a manageable chronic illness into a death sentence and perpetuating the spread of HIV". This is the why it is so important to provide good information to the people so that they know the actual methods of prevention and stop discriminating people living with HIV.
+From Wikipedia: AIDS stigma exists around the world and it prevents many people from seeking HIV testing, returning for their results, or securing treatment, possibly turning what could be a manageable chronic illness into a death sentence and perpetuating the spread of HIV. 
+
+This is the why it is so important to provide good information to the people so that they know the actual methods of prevention and stop discriminating people living with HIV.
 
 Let's look at the percent of population that has reasonable knowledge about HIV. In this case, a person is considered to have knowledge about HIV if they correctly identify the two major ways of preventing the sexual transmission of HIV (using condoms and limiting sex to one faithful, uninfected partner), reject the two most common local misconceptions about HIV transmission, and know that a healthy-looking person can have HIV.
 
 Even though this particular feature is really interesting, it was too difficult to analyze because of the huge proportion of missing values:
 
-```{r knowledge missing, message=FALSE, warning=FALSE, echo=FALSE, fig.width=8}
+```{r knowledge missing, message=FALSE, warning=FALSE, echo=TRUE, fig.width=8}
 dataset_hnp_health %>%
   select(country_name, year, SH.HIV.KNOW.FE.ZS, region) %>%
   filter(year >= 1997, str_detect(region, "Africa")) %>%
@@ -712,7 +685,7 @@ dataset_hnp_health %>%
 
 As I encountered difficulties because of of the missing data, I decided to plot the evolution of the variable for some of the countries from the risk area that had the biggest amount of measures:
 
-```{r knowledge, message=FALSE, warning=FALSE, echo=FALSE, fig.width=8}
+```{r knowledge, message=FALSE, warning=FALSE, fig.width=8}
 # countries that have biggest number measures in the period
 more_info <- dataset_hnp_health %>%
   select(country_name, year, SH.HIV.KNOW.FE.ZS, region) %>%
@@ -726,6 +699,8 @@ more_info <- dataset_hnp_health %>%
   arrange(desc(count)) %>%
   pull(country_name)
 
+# countries more appereances in high risk (hightest HIV %)
+# females
 g_kn_fe <- dataset_hnp_health %>%
   select(country_name, year, SH.HIV.KNOW.FE.ZS, region) %>%
   filter(
@@ -744,6 +719,11 @@ g_kn_fe <- dataset_hnp_health %>%
   theme(legend.position="none") +
   ylim(10, 65)
 
+```
+I did the same for males and then plot them together:
+```{r , echo= FALSE, warning=FALSE, message=FALSE}
+# countries more appereances in high risk (hightest HIV %)
+# males
 g_kn_ma <- dataset_hnp_health %>%
   select(country_name, year, SH.HIV.KNOW.FE.ZS, SH.HIV.KNOW.MA.ZS, region) %>%
   filter(
@@ -760,8 +740,10 @@ g_kn_ma <- dataset_hnp_health %>%
   ggtitle("") +
   scale_x_continuous(breaks = c(1997, 2002, 2007, 2013, 2017), limits = c(1997, 2017)) +
   ylim(10, 65)
-
-g_kn_fe + g_kn_ma
+```
+```{r , message=FALSE, warning=FALSE}
+# patchwork package:
+g_kn_fe + g_kn_ma 
 ```
 
 Looking at both charts I couldn't affirm much about this indicator.
@@ -821,18 +803,19 @@ g_ma <- dataset_hnp_health %>%
 g_fe+g_ma
 ```
 
-We can appreciate an increasement in the percent for both available gender information. It is also important to notice that male values are in general much bigger than female values.
+We observe an increasement in the percent for both available gender information. It is also important to notice that male values are in general much bigger than female values.
 
 ## Conclusions
 
 In this document we studied in general the prevalence of HIV in the world. We found that the number of new infections has been decreasing in the last 20 years. Also, the number of AIDS-related deaths did decrease since 2004. We realized that the most affected area is the South of Africa and realized that the north of Africa has one of the lowest prevalence of the virus of the world. 
 
-Regarding treatment all plots show that the coverage of ART has been improved in general. We couldn't say much about the evolution of the knowledge about HIV because of the big proportion of missing data, but it seems to be increasing. Finally, we had good news about safe practices: the use of condom has been increasing during the studied period. The behavior of these features over the time is compatible with the prevalence evolution and it validates the strong correlation that they are supposed to present.
+Regarding treatment, all plots show that the coverage percent of ART has increased. We couldn't say much about the evolution of the knowledge about HIV because of the big proportion of missing data, but it seems to be increasing in the long term. Finally, we had good news about safe practices: the use of condom has been increasing during the studied period. The behavior of these features over the time is compatible with the prevalence evolution and it validates the strong correlation that they have.
 
 ## Sources
 
 * data.worldbank.org (Data)
 * wikipedia.org (HIV/AIDS information)
+* flaticon.com/free-icon/aids_119055 (aids riboon)
 * avert.org (ART/PMTCT information)
 * the stigma project (stigma images)
 * IYO - clker.com (pill icon)
