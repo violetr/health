@@ -1,4 +1,3 @@
-# usar crosstalk para comparar obesidad y desnutricion
 # https://hrbrmstr.github.io/metricsgraphics/ para umap?
 
 library(shiny)
@@ -11,13 +10,12 @@ library(leaflet)
 # Define UI for application that draws a histogram
 shinyUI(
   dashboardPage(
-    dashboardHeader(title = "HNP Data", text = "HNP Data", img(src = "user2019.jpg", height = 35, align = "center")),
+    dashboardHeader(title = "HNP Data", text = "HNP Data"),
     dashboardSidebar(size = "thin", sidebarMenu(
       menuItem(tabName = "home", text = "Home", icon = icon("home")),
       menuItem(tabName = "map", text = "Map", icon = icon("map")),
-      menuItem(tabName = "umap", text = "Countries Embedding", icon = icon("spinner")),
-      menuItem(tabName = "other", text = "Time Statistics", icon = icon("chart line")),
-      menuItem(tabName = "yother", text = "Gender Comparison", icon = icon("venus mars"))
+      menuItem(tabName = "umap", text = "Country Embeddings", icon = icon("spinner")),
+      menuItem(tabName = "other", text = "Time Statistics", icon = icon("chart line"))
     )),
     dashboardBody(
       tabItems(
@@ -30,7 +28,7 @@ shinyUI(
               h1("HNP Analysis for the UseR!2019 Datathon", align = "center"),
               # img(src = "user2019.jpg", height = 40),
               h3("You can check some interesting visualizations that came out from the analysis of the Health, Nutrition and Population dataset 
-                   holded by the World Bank Group blablablab lablabla"),
+                   holded by the World Bank Group. I focused on the HIV prevalence in the world"),
               h3("You can navigate the menu to select the different analysis axis"),
               br(), br(), br(), br(), br(), br(), br(), br(),
               br(), br(), br(), br(), br(), br(), br(),
@@ -79,8 +77,7 @@ shinyUI(
               width = 12,
               leafletOutput("coloredmap")
             )
-          ),
-          fluidRow(plotOutput("time", width = "100%"))
+          )
         ),
         tabItem(
           tabName = "umap",
@@ -111,16 +108,3 @@ shinyUI(
   )
 )
 
-
-
-# instagram card
-# div(class = "ui card", div(class = "content",
-#                            div(class = "right floated meta", "14h"),
-#                            img(class = "ui avatar image", src = "endpov.png"),
-#                            "worldbank"), div(class = "image", img(src = "peoplep.jpg")),
-#     div(class = "content", span(class = "right floated",
-#                                 icon("heart outline like"), "17 likes"),
-#         icon("comment"), "3 comments"),
-#     div(class = "extra content", div(class = "ui large transparent left icon input",
-#                                      icon("heart ouline"), tags$input(type = "text",
-#                                                                       placeholder = "Add Comment..."))))

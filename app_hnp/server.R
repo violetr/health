@@ -37,13 +37,13 @@ shinyServer(function(input, output) {
   ### read data ####
 
   # despues filtrar solo variables utilizadas
-  dataseth_input <- read_csv(here::here("data", "dataset_hnp_health_exp.csv"))
+  dataseth_input <- read_feather(here::here("data", "dataset_hnp_health_exp"))
 
-  indicators_input <- read_csv(here::here("data", "indicators_hnp_exp.csv"))
+  indicators_input <- read_feather(here::here("data", "indicators_hnp_exp"))
 
   # countries_input <- read_csv(here::here("data", "countries_hnp_exp.csv"))
 
-  owundata_input <- readRDS(here::here("data", "overweigh_undernourish.rds"))
+  #owundata_input <- readRDS(here::here("data", "overweigh_undernourish.rds"))
 
   countries_geo <- readRDS(here::here("app_hnp", "data", "countries_simple.rds"))
 
@@ -78,12 +78,13 @@ shinyServer(function(input, output) {
   ### choropleth ####
 
   output$coloredmap <- renderLeaflet({
+    
     an_year_1 <- input$year1
 
     aids_countries <- dataseth_input %>%
-      select(country_code, year, SH.DYN.AIDS, SP.POP.TOTL) %>%
+      select(country_code, year, SH.HIV.TOTL, SP.POP.TOTL) %>%
       filter(year == an_year_1) %>%
-      mutate(proportion_aids = SH.DYN.AIDS / SP.POP.TOTL * 100) %>%
+      mutate(proportion_aids = SH.HIV.TOTL / SP.POP.TOTL * 100) %>%
       filter(!is.na(proportion_aids)) %>%
       select(-year)
 
@@ -144,74 +145,90 @@ shinyServer(function(input, output) {
       )
   })
 
-  output$time <- renderPlot({
-    
-    if (selected_countries() == "all") {
-      ggplot() +
-        geom_line(data = owundata_input, aes(
-          x = year,
-          y = value,
-          group = country_code,
-          color = region
-        )) +
-        facet_wrap(~measure) +
-        scale_y_continuous(limits = c(0, 0.8)) +
-        scale_x_discrete(breaks = c(1975, 1990, 2005, 2016)) +
-        ylab("Percent of adults (%)")
-      
-    } else {
-      out_region <- owundata_input %>%
-        filter(!country_code %in% selected_countries())
-      in_region <- owundata_input %>%
-        filter(country_code %in% selected_countries())  
-      
-      ggplot() +
-        geom_line(
-          data = out_region, aes(year, value, group = country_code),
-          colour = alpha("grey", 0.65)
-        ) +
-        geom_line(data = in_region, aes(
-          x = year,
-          y = value,
-          group = country_code,
-          color = region
-        )) +
-        facet_wrap(~measure) +
-        scale_y_continuous(limits = c(0, 0.8)) +
-        scale_x_discrete(breaks = c(1975, 1990, 2005, 2016)) +
-        ylab("Percent of adults (%)")
-      
-    }
-  })
+  # output$time <- renderPlot({
+  #   
+  #   if (selected_countries() == "all") {
+  #     ggplot() +
+  #       geom_line(data = owundata_input, aes(
+  #         x = year,
+  #         y = value,
+  #         group = country_code,
+  #         color = region
+  #       )) +
+  #       facet_wrap(~measure) +
+  #       scale_y_continuous(limits = c(0, 0.8)) +
+  #       scale_x_discrete(breaks = c(1975, 1990, 2005, 2016)) +
+  #       ylab("Percent of adults (%)")
+  #     
+  #   } else {
+  #     out_region <- owundata_input %>%
+  #       filter(!country_code %in% selected_countries())
+  #     in_region <- owundata_input %>%
+  #       filter(country_code %in% selected_countries())  
+  #     
+  #     ggplot() +
+  #       geom_line(
+  #         data = out_region, aes(year, value, group = country_code),
+  #         colour = alpha("grey", 0.65)
+  #       ) +
+  #       geom_line(data = in_region, aes(
+  #         x = year,
+  #         y = value,
+  #         group = country_code,
+  #         color = region
+  #       )) +
+  #       facet_wrap(~measure) +
+  #       scale_y_continuous(limits = c(0, 0.8)) +
+  #       scale_x_discrete(breaks = c(1975, 1990, 2005, 2016)) +
+  #       ylab("Percent of adults (%)")
+  #     
+  #   }
+  # })
 
   ### UMAP embedding ####
 
   output$pumap <- renderPlot({
     an_year_2 <- input$year2
 
-    dataset_comparable_health <- dataseth_input %>%
+    # setting umap options for reproducibility
+    custom.config <- umap.defaults
+    custom.config$random_state <- 44
+    custom.config$min_dist <- 0.1
+    
+    # I keep comparable indicators (%) HIV related
+    comparable_health_indicators <- indicators_hnp_keep %>%
+      filter(
+        (str_detect(indicator_name, "%") | str_detect(indicator_name, "rate")) & (str_detect(indicator_name, "AIDS") | str_detect(indicator_name, "HIV") |
+                                                                                    str_detect(indicator_name, "Condom")),
+        gen_topic == "Health",
+        !part_topic %in% " Population"
+      ) %>%
+      pull(series_code)
+    
+    dataset_comparable_health <- dataset_hnp_health %>%
       filter(year == an_year_2) %>%
       select(country_name, country_code, region, one_of(comparable_health_indicators)) %>%
-      select_if(function(x) (sum(is.na(x)) <= (0.2 * length(x))) || is.character(x)) %>%
-      drop_na()
-
-    print(dataset_comparable_health)
-
-    data_to_umap <- as.matrix(dataset_comparable_health[, 4:ncol(dataset_comparable_health)])
-
-    data_health_umap <- umap(data_to_umap)
-
+      select_if(function(x) (sum(is.na(x)) <= (0.4 * length(x))) || is.character(x))
+    
+    # I impute missing data
+    res.comp <- imputePCA(as.data.frame(dataset_comparable_health[, 4:ncol(dataset_comparable_health)]))
+    dataset_comparable_health_com <- res.comp$comp
+    
+    data_to_umap <- as.matrix(dataset_comparable_health_com)
+    data_health_umap <- umap(data_to_umap, config = custom.config)
+    
     data_umap_health <- tibble(
       x = data_health_umap$layout[, 1],
       y = data_health_umap$layout[, 2],
       country = dataset_comparable_health$country_code,
       region = dataset_comparable_health$region
     )
-
+    
+    # pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
     data_umap_health %>%
       ggplot(aes(x, y, color = region, label = country)) +
       geom_point() +
-      geom_text(aes(label = country), hjust = 0, vjust = 0) +
+      geom_text(aes(label = country), hjust = 0, vjust = 0, show.legend = FALSE) +
       theme_void()
   })
 })
