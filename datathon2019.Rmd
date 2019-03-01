@@ -45,7 +45,7 @@ library(dbscan)
 my_palette <- rainbow_hcl(8)
 ```
 
-In this document I present my analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file `datathon2019.Rmd`. A Shiny App showing the discussed topic and other visualizations can be accessed here. All the code that I used to build both deliverables is available in my github @violetr in the health repository. 
+In this document I present my analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file `datathon2019.Rmd`. A Shiny App showing the discussed topic and other visualizations can be accessed here: violetr.shinyapps.io/hiv_hnp/. It's a complementary material but it doesn't replace this report. All the code that I used to build both the document and the application is available on this repository: github.com/violetr/health. 
 
 <center><img src="figures/aids_6.png", width = "20%"></center>
 
@@ -404,6 +404,8 @@ leaflet(data = countries_geo) %>%
 
 The most affected area is in particular the South of Africa, with countries from the North of Africa with one of the lowest HIV-infection shares. 
 
+The Shiny App can be used to explore the choropleth for different HIV indicators and years.
+
 ### How are countries grouped based on HIV indicators?
 
 Let's see how countries are grouped depending only on HIV related features. In order to do this I only considered the commensurable features, that is, relative values like percent or rates. Firstly, I embedded the dataset to 2D having into account HIV related features. Like that, I could visualize how countries group and see how clusters are related to the geographical location. I had to impute some missing values with the `missMDA` package prior to the embedding transformation.
@@ -412,36 +414,52 @@ UMAP is a new (2018) embedding algorithm that has a similar scheme to t-SNE, the
 
 Let's see the resulting embedding for 2015:
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
+```{r function, echo=FALSE}
 # setting umap options for reproducibility
+# defining function that select hiv related indicators and compute NA
+
 custom.config <- umap.defaults
 custom.config$random_state <- 44
 custom.config$min_dist <- 0.1
 
+data_to_embed <- function(indicators_hnp_keep, dataset_hnp_health, an_year, custom.config) {
+    
+  # I keep comparable indicators (%) HIV related
+  comparable_health_indicators <- indicators_hnp_keep %>%
+    filter(
+      (str_detect(indicator_name, "%") | str_detect(indicator_name, "rate")) & (str_detect(indicator_name, "AIDS") | str_detect(indicator_name, "HIV") |
+        str_detect(indicator_name, "Condom")),
+      !part_topic %in% " Population"
+    ) %>%
+    pull(series_code)
+  
+  dataset_comparable_health <- dataset_hnp_health %>%
+    filter(year == an_year) %>%
+    select(country_name, country_code, region, one_of(comparable_health_indicators)) %>%
+    select_if(function(x) (sum(is.na(x)) <= (0.4 * length(x))) || is.character(x))
+  
+  # I impute missing data
+  res.comp <- imputePCA(as.data.frame(dataset_comparable_health[, 4:ncol(dataset_comparable_health)]))
+  dataset_comparable_health_com <- res.comp$comp
+  
+  data_to_umap <- as.matrix(dataset_comparable_health_com)
+  return(list(data_to_umap=data_to_umap, dataset_comparable_health = dataset_comparable_health))
+}
+
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # UMAP embedding for a year, health
 
 an_year <- 2015
 
-# I keep comparable indicators (%) HIV related
-comparable_health_indicators <- indicators_hnp_keep %>%
-  filter(
-    (str_detect(indicator_name, "%") | str_detect(indicator_name, "rate")) & (str_detect(indicator_name, "AIDS") | str_detect(indicator_name, "HIV") |
-      str_detect(indicator_name, "Condom")),
-    gen_topic == "Health",
-    !part_topic %in% " Population"
-  ) %>%
-  pull(series_code)
+res <- data_to_embed(indicators_hnp_keep, dataset_hnp_health, an_year,  custom.config)
 
-dataset_comparable_health <- dataset_hnp_health %>%
-  filter(year == an_year) %>%
-  select(country_name, country_code, region, one_of(comparable_health_indicators)) %>%
-  select_if(function(x) (sum(is.na(x)) <= (0.4 * length(x))) || is.character(x))
+data_to_umap <- res$data_to_umap 
 
-# I impute missing data
-res.comp <- imputePCA(as.data.frame(dataset_comparable_health[, 4:ncol(dataset_comparable_health)]))
-dataset_comparable_health_com <- res.comp$comp
+dataset_comparable_health <- res$dataset_comparable_health
 
-data_to_umap <- as.matrix(dataset_comparable_health_com)
 data_health_umap <- umap(data_to_umap, config = custom.config)
 
 data_umap_health <- tibble(
@@ -465,8 +483,10 @@ We can visualize 6/7 clear groups, two of which are composed only by African cou
 Secondly, I clustered the embedded data with the HDBSCAN density-based clustering algorithm from the `dbscan` library. I plotted the resulting clustering encoded with colors in the world map:
 
 ```{r clustering, echo=FALSE, message=FALSE, warning=FALSE}
+# cluster countries from embedding representation
 hiv_cl <- hdbscan(data_umap_health[, c(1, 2)], minPts = 6)$cluster
 
+# add clusters to dataset
 clt_to_map <- data_umap_health %>%
   select(country) %>%
   mutate(cstr = hiv_cl)
@@ -516,35 +536,14 @@ Like this, we can see the clusters from the embedding but in a more tidy way.
 It's interesting to compare to the same visualization from 20 years before:
 
 ```{r embedding 2, echo=FALSE, message=FALSE, warning=FALSE}
-# setting umap options for reproducibility
-custom.config <- umap.defaults
-custom.config$random_state <- 44
-custom.config$min_dist <- 0.1
-
-# UMAP embedding for a year, health
-
 an_year <- 1995
 
-# I keep comparable indicators (%) HIV related
-comparable_health_indicators <- indicators_hnp_keep %>%
-  filter(
-    (str_detect(indicator_name, "%") | str_detect(indicator_name, "rate")) & (str_detect(indicator_name, "AIDS") | str_detect(indicator_name, "HIV") |
-      str_detect(indicator_name, "Condom")),
-    gen_topic == "Health",
-    !part_topic %in% " Population"
-  ) %>%
-  pull(series_code)
+res <- data_to_embed(indicators_hnp_keep, dataset_hnp_health, an_year,  custom.config)
 
-dataset_comparable_health <- dataset_hnp_health %>%
-  filter(year == an_year) %>%
-  select(country_name, country_code, region, one_of(comparable_health_indicators)) %>%
-  select_if(function(x) (sum(is.na(x)) <= (0.4 * length(x))) || is.character(x))
+data_to_umap <- res$data_to_umap 
 
-# I impute missing data
-res.comp <- imputePCA(as.data.frame(dataset_comparable_health[, 4:ncol(dataset_comparable_health)]))
-dataset_comparable_health_com <- res.comp$comp
+dataset_comparable_health <- res$dataset_comparable_health
 
-data_to_umap <- as.matrix(dataset_comparable_health_com)
 data_health_umap <- umap(data_to_umap, config = custom.config)
 
 data_umap_health <- tibble(
@@ -554,16 +553,14 @@ data_umap_health <- tibble(
   region = dataset_comparable_health$region
 )
 
-# pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
 data_umap_health %>%
   ggplot(aes(x, y, color = region, label = country)) +
   geom_point() +
   geom_text(aes(label = country), hjust = 0, vjust = 0, show.legend = FALSE) +
   theme_void()
-# dev.off()
 ```
 
-You can use the shiny app to see how are all these plots change for different selected years.
+All sub-Saharan African countries were in the same group before. 
 
 ```{r clustering 2, echo=FALSE, message=FALSE, warning=FALSE}
 hiv_cl <- hdbscan(data_umap_health[, c(1, 2)], minPts = 6)$cluster
@@ -571,8 +568,6 @@ hiv_cl <- hdbscan(data_umap_health[, c(1, 2)], minPts = 6)$cluster
 clt_to_map <- data_umap_health %>%
   select(country) %>%
   mutate(cstr = hiv_cl)
-
-paleta <- rainbow_hcl(8, c = 35, l = 85)
 
 factpal <- colorFactor(paleta, clt_to_map$cstr)
 
@@ -611,6 +606,8 @@ leaflet(data = countries_geo) %>%
   )
 ```
 <br>
+
+The shiny app can be used to explore how these plots change for different years.
 
 ## Treatment, education and safe practices
 

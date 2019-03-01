@@ -1,8 +1,5 @@
-# https://hrbrmstr.github.io/metricsgraphics/ para umap?
-
 library(shiny)
 library(semantic.dashboard)
-library(crosstalk)
 library(leaflet)
 
 # icon:  money bill alternate
@@ -14,8 +11,7 @@ shinyUI(
     dashboardSidebar(size = "thin", sidebarMenu(
       menuItem(tabName = "home", text = "Home", icon = icon("home")),
       menuItem(tabName = "map", text = "Map", icon = icon("map")),
-      menuItem(tabName = "umap", text = "Country Embeddings", icon = icon("spinner")),
-      menuItem(tabName = "other", text = "Time Statistics", icon = icon("chart line"))
+      menuItem(tabName = "umap", text = "Country Embeddings", icon = icon("spinner"))
     )),
     dashboardBody(
       tabItems(
@@ -25,10 +21,11 @@ shinyUI(
           fluidRow(
             column(
               width = 8, height = "100%",
-              h1("HNP Analysis for the UseR!2019 Datathon", align = "center"),
+              h1("HNP analysis", align = "center"),
               # img(src = "user2019.jpg", height = 40),
               h3("You can check some interesting visualizations that came out from the analysis of the Health, Nutrition and Population dataset 
-                   holded by the World Bank Group. I focused on the HIV prevalence in the world"),
+                   holded by the World Bank Group."),
+              h3("I focused on the HIV prevalence in the world."),
               h3("You can navigate the menu to select the different analysis axis"),
               br(), br(), br(), br(), br(), br(), br(), br(),
               br(), br(), br(), br(), br(), br(), br(),
@@ -70,7 +67,7 @@ shinyUI(
                 "Select a year:",
                 min = 1995,
                 max = 2015,
-                value = 2000, sep = ""
+                value = 2015, sep = ""
               )
             ),
             column(
@@ -85,14 +82,17 @@ shinyUI(
             # Sidebar with a slider input 
 
             column(
-              width = 5, h3("You can use the slider to select a year, 
-               you see in the map the proportion of people bla bla"),
+              width = 5, h3("You can use the slider to select a year and a topic. 
+                             On the right you can see an UMAP embedding based on  
+the group of features belonging to the selected topic 
+               "),
               sliderInput("year2",
                 "Year:",
                 min = 1995,
                 max = 2015,
-                value = 2000
-              )
+                value = 2015, sep = ""
+              ),
+              selectInput("topics", "Topic:", c("HIV", "Gender", "Economy","Education"))
             ),
 
             # Show a plot of the generated distribution

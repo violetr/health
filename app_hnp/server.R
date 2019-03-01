@@ -1,35 +1,15 @@
 library(shiny)
 library(semantic.dashboard)
 library(tidyverse)
-library(crosstalk)
+library(feather)
 library(here)
 library(maps)
-library(ggthemes)
 library(umap)
 library(leaflet)
 library(geojsonio)
 library(htmltools)
-library(gghighlight)
+library(missMDA)
 
-is_in_bounds <- function(contry_coord, bounds) {
-  country_lat <- contry_coord[[1]]
-  country_long <- contry_coord[[2]]  
-  return(country_lat > bounds$south & 
-           country_lat < bounds$north & 
-           country_long < bounds$east & 
-           country_long > bounds$west)
-}
-
-countries_in_bounding_box <- function(geo_data, sel_bounds) {
-  
-  filter_in_bounds <- geo_data@polygons %>%
-    purrr::map( ~ .x@labpt) %>%
-    purrr::map_lgl(is_in_bounds, bounds = sel_bounds)
-  
-  geo_data@data %>%
-    filter(filter_in_bounds) %>%
-    pull(ISO_A3)
-}
 
 # Define server logic
 shinyServer(function(input, output) {
@@ -37,42 +17,24 @@ shinyServer(function(input, output) {
   ### read data ####
 
   # despues filtrar solo variables utilizadas
-  dataseth_input <- read_feather(here::here("data", "dataset_hnp_health_exp"))
-
-  indicators_input <- read_feather(here::here("data", "indicators_hnp_exp"))
-
-  # countries_input <- read_csv(here::here("data", "countries_hnp_exp.csv"))
+  dataset_hnp_health <- read_feather("dataset_hnp_health_exp")
+  countries_hnp_keep <- read_feather("countries_hnp_exp")
+  indicators_hnp_keep <- read_feather("indicators_hnp_exp")
+  dataset_hnp <- read_feather("dataset_hnp_exp")
 
   #owundata_input <- readRDS(here::here("data", "overweigh_undernourish.rds"))
-
-  countries_geo <- readRDS(here::here("app_hnp", "data", "countries_simple.rds"))
-
+  dataset_hnp_education <- read_feather("dataset_hnp_education_exp")
+  countries_geo <- readRDS("countries_simple.rds")
+  dataset_hnp_others <- read_feather("dataset_hnp_others_exp")
+  
+  real_countries <- countries_hnp_keep %>% # real countries are not aggregations
+    filter(!is.na(currency_unit)) %>% # I identify them because they don't
+    pull(table_name) # have currency unit
   ### common variables ####
-
-  # esto tambien puede hacerse antes y cargar
-  comparable_health_indicators <- indicators_input %>%
-    filter(
-      str_detect(indicator_name, "%"),
-      gen_topic == "Health",
-      !part_topic %in% " Population"
-    ) %>%
-    pull(series_code)
 
   binpal <- colorBin("Reds", domain = c(0, 18), 9, pretty = FALSE)
   
  # observeEvent(input, {cat("You have chosen:", input[[ns(map_bounds)]])})
-  
-  selected_countries <- reactive({
-    cat(file=stderr(), "drawing histogram with", input$map_bounds, "bins", "\n")
-    if (is.null(input$coloredmap_bounds) || is.na(input$coloredmap_bounds)){
-      "all"
-    } else {
-      sel_bounds <- input$coloredmap_bounds
-      print(sel_bounds)
-      countries_in_bounding_box(countries_geo, sel_bounds)
-    }
-  })
-  
   
   
   ### choropleth ####
@@ -81,7 +43,7 @@ shinyServer(function(input, output) {
     
     an_year_1 <- input$year1
 
-    aids_countries <- dataseth_input %>%
+    aids_countries <- dataset_hnp_health %>%
       select(country_code, year, SH.HIV.TOTL, SP.POP.TOTL) %>%
       filter(year == an_year_1) %>%
       mutate(proportion_aids = SH.HIV.TOTL / SP.POP.TOTL * 100) %>%
@@ -189,39 +151,94 @@ shinyServer(function(input, output) {
 
   output$pumap <- renderPlot({
     an_year_2 <- input$year2
-
-    # setting umap options for reproducibility
     custom.config <- umap.defaults
     custom.config$random_state <- 44
     custom.config$min_dist <- 0.1
+    if(input$topics == "HIV") {
+      # setting umap options for reproducibility
+      # I keep comparable indicators (%) HIV related
+      comparable_health_indicators <- indicators_hnp_keep %>%
+        filter(
+          (str_detect(indicator_name, "%") | str_detect(indicator_name, "rate")) & (str_detect(indicator_name, "AIDS") | str_detect(indicator_name, "HIV") |
+                                                                                      str_detect(indicator_name, "Condom")),
+          gen_topic == "Health",
+          !part_topic %in% " Population"
+        ) %>%
+        pull(series_code)
+      
+      dataset_comparable <- dataset_hnp_health %>%
+        filter(year == an_year_2) %>%
+        select(country_name, country_code, region, one_of(comparable_health_indicators)) %>%
+        select_if(function(x) (sum(is.na(x)) <= (0.4 * length(x))) || is.character(x))
+      
+      # I impute missing data
+      res.comp <- imputePCA(as.data.frame(dataset_comparable[, 4:ncol(dataset_comparable)]))
+      dataset_comparable_health_com <- res.comp$comp
+      
+      data_to_umap <- as.matrix(dataset_comparable_health_com)
+    }
+    if (input$topics == "Gender") {
+      comparable_gender_indicators <- indicators_hnp_keep %>%
+        filter(((str_detect(indicator_name, "%") | str_detect(indicator_name, "rate"))  & (str_detect(indicator_name, "female") | str_detect(indicator_name, "women")))) %>%
+        pull(series_code)
+      
+      dataset_hnp_gender = dataset_hnp %>% 
+        left_join(indicators_hnp_keep, by= c("indicator_code"="series_code")) %>%
+        select(-topic, -indicator_name.x, -indicator_name.y, -long_definition, -part_topic, -gen_topic) %>%
+        filter(country_name %in% real_countries) %>%
+        filter(indicator_code %in% comparable_gender_indicators) %>%
+        gather(key = year, value = indicator_value, `1960`:`2017`) %>%
+        spread(key = indicator_code, value = indicator_value) %>%
+        left_join(countries_hnp_keep, by = c("country_code"= "country_code")) 
+      
+      dataset_comparable <- dataset_hnp_gender %>%
+        filter(year == an_year_2) %>%
+        select(country_name, country_code, region, one_of(comparable_gender_indicators))  %>%
+        select_if(function(x) (sum(is.na(x)) <= (0.3 * length(x))) || is.character(x)) %>%
+        drop_na()
+      
+      data_to_umap <- as.matrix(dataset_comparable[, 4:ncol(dataset_comparable)])  
+    }
+    if (input$topics == "Economy") {
+      comparable_oth_indicators <- indicators_hnp_keep %>%
+        filter((str_detect(indicator_name, "%") & !str_detect(indicator_name, "female") & !str_detect(indicator_name, "male") & !str_detect(indicator_name, "women")) |
+                 (str_detect(indicator_name, "HCI") & !str_detect(indicator_name, "female") & !str_detect(indicator_name, "male")) |
+                 str_detect(indicator_name, "GNI"), 
+               gen_topic != "Education",
+               gen_topic != "Health") %>%
+        pull(series_code)
+      
+      dataset_comparable <- dataset_hnp_others %>%
+        filter(year == an_year_2) %>%
+        select(country_name, country_code, region, one_of(comparable_oth_indicators))  %>%
+        select_if(function(x) (sum(is.na(x)) <= (0.3 * length(x))) || is.character(x)) %>%
+        drop_na()
+      
+      data_to_umap <- as.matrix(dataset_comparable[, 4:ncol(dataset_comparable)])
+      
+    }
+    if (input$topics == "Education") {
+      comparable_ed_indicators <- indicators_hnp_keep %>%
+        filter((str_detect(indicator_name, "%") & !str_detect(indicator_name, "female") & !str_detect(indicator_name, "male") & !str_detect(indicator_name, "women")),
+               gen_topic == "Education") %>%
+        pull(series_code)
+      
+      dataset_comparable <- dataset_hnp_education %>%
+        filter(year == an_year_2) %>%
+        select(country_name, country_code, region, one_of(comparable_ed_indicators))  %>%
+        select_if(function(x) (sum(is.na(x)) <= (0.3 * length(x))) || is.character(x)) %>%
+        drop_na()
+      
+      data_to_umap <- as.matrix(dataset_comparable[, 4:ncol(dataset_comparable)])
+    }
     
-    # I keep comparable indicators (%) HIV related
-    comparable_health_indicators <- indicators_hnp_keep %>%
-      filter(
-        (str_detect(indicator_name, "%") | str_detect(indicator_name, "rate")) & (str_detect(indicator_name, "AIDS") | str_detect(indicator_name, "HIV") |
-                                                                                    str_detect(indicator_name, "Condom")),
-        gen_topic == "Health",
-        !part_topic %in% " Population"
-      ) %>%
-      pull(series_code)
-    
-    dataset_comparable_health <- dataset_hnp_health %>%
-      filter(year == an_year_2) %>%
-      select(country_name, country_code, region, one_of(comparable_health_indicators)) %>%
-      select_if(function(x) (sum(is.na(x)) <= (0.4 * length(x))) || is.character(x))
-    
-    # I impute missing data
-    res.comp <- imputePCA(as.data.frame(dataset_comparable_health[, 4:ncol(dataset_comparable_health)]))
-    dataset_comparable_health_com <- res.comp$comp
-    
-    data_to_umap <- as.matrix(dataset_comparable_health_com)
     data_health_umap <- umap(data_to_umap, config = custom.config)
     
     data_umap_health <- tibble(
       x = data_health_umap$layout[, 1],
       y = data_health_umap$layout[, 2],
-      country = dataset_comparable_health$country_code,
-      region = dataset_comparable_health$region
+      country = dataset_comparable$country_code,
+      region = dataset_comparable$region
     )
     
     # pdf(here::here("figures/umap_1995.pdf"), height = 8, width = 18)
