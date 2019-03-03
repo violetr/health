@@ -1,6 +1,6 @@
 ---
 title: "Is HIV under control?"
-author: "Violeta Roizman  @L2S-CentraleSupélec and @IC-FCEN-UBA"
+author: "Violeta Roizman"
 date: "Febrary 2019"
 output:
   html_document:
@@ -45,7 +45,7 @@ library(dbscan)
 my_palette <- rainbow_hcl(8)
 ```
 
-In this document I present my analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file `datathon2019.Rmd`. A Shiny App showing the discussed topic and other visualizations can be accessed here: violetr.shinyapps.io/hiv_hnp/. It's a complementary material but it doesn't replace this report. All the code that I used to build both the document and the application is available in this repository: github.com/violetr/health. 
+In this document I present my analysis of the "Health, Nutrition and Population Statistics" dataset hosted by the World Bank Group. It was compiled from an RMarkdown file `datathon2019.Rmd`. A Shiny App showing the discussed topic and other visualizations can be accessed here. It's a complementary material but it doesn't replace this report. All the code that I used to build both the document and the application is available in this repository: github.com/violetr/health. 
 
 <center><img src="figures/aids_6.png", width = "20%"></center>
 
